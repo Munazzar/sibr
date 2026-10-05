@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sibr Matrix</title>
+<meta name="description" content="Sibr — validate business ideas across communities, geographies, age groups and interests, with an Islamic-alignment lens.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<canvas id="bg" aria-hidden="true"></canvas>
+
+<header class="hero">
+  <div class="brand"><span class="mark" aria-hidden="true"></span>SIBR<span class="sub">matrix</span></div>
+  <h1>Test an idea against <em>every lens</em>, not just your own.</h1>
+  <p class="lede">Sibr scores each idea on pain, value, target, growth, Islamic alignment and competition — then breaks it down across geographies, age groups, communities and interests to show <strong>where it actually wins</strong>.</p>
+  <form id="ideaForm" class="ideaForm" autocomplete="off">
+    <input id="ideaInput" type="text" placeholder="Describe an idea… e.g. halal investing app for students" maxlength="140" aria-label="Business idea">
+    <button type="submit">Run lenses <span aria-hidden="true">→</span></button>
+  </form>
+</header>
+
+<main>
+  <section class="panel" aria-labelledby="mxTitle">
+    <div class="panelHead">
+      <h2 id="mxTitle">Validation matrix</h2>
+      <span class="hint">Click a row to open its lens map</span>
+    </div>
+    <div class="tableWrap">
+      <table id="matrix">
+        <thead>
+          <tr><th>#</th><th class="left">Idea</th><th>Pain</th><th>Value</th><th>Target</th><th>Growth</th><th>Islamic</th><th>Competition</th><th>Sibr</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="lensPanel" aria-labelledby="lensTitle">
+    <div class="panelHead">
+      <h2 id="lensTitle">Lens map</h2>
+      <span class="hint" id="lensIdea"></span>
+    </div>
+    <div id="lenses" class="lenses"></div>
+    <div class="best" id="best"></div>
+  </section>
+
+  <section class="panel explain">
+    <h2>How the engine works</h2>
+    <ol class="steps">
+      <li><b>Idea card</b><span>Problem, user, solution, revenue, delivery.</span></li>
+      <li><b>Lens grid</b><span>Geography × age × community × interest cells.</span></li>
+      <li><b>Evidence</b><span>Competitors, reviews, forums, trends per cell.</span></li>
+      <li><b>Persona pass</b><span>LLM writes a short analysis per cell.</span></li>
+      <li><b>Verdict heads</b><span>Fine-tuned Laya classifiers return typed, calibrated verdicts.</span></li>
+    </ol>
+    <p class="note">This release runs a transparent <b>heuristic engine in the browser</b> so the UI is usable today. Scores are directional, not research. Islamic-alignment output is a <b>flag for scholarly review</b>, never a ruling.</p>
+  </section>
+</main>
+
+<aside id="drawer" class="drawer" aria-hidden="true">
+  <button class="close" id="closeDrawer" aria-label="Close">×</button>
+  <div id="drawerBody"></div>
+</aside>
+
+<footer>Sibr · صبر · patience in building · <a href="https://github.com/Munazzar/sibr">source</a></footer>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
