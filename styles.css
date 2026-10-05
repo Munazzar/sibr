@@ -16,10 +16,10 @@ a{color:var(--gold2)}
 .cta:hover{background:rgba(214,180,106,.1)}
 .brand{display:flex;align-items:center;gap:10px;font:700 15px/1 'JetBrains Mono',monospace;letter-spacing:.32em;color:var(--gold)}
 .brand .sub{color:var(--mute);letter-spacing:.2em;font-weight:500}
-.mark{width:22px;height:22px;position:relative;animation:spin 18s linear infinite}
-.mark::before,.mark::after{content:"";position:absolute;inset:3px;border:2px solid var(--gold)}
-.mark::after{transform:rotate(45deg)}
-@keyframes spin{to{transform:rotate(360deg)}}
+.mark{width:22px;height:22px;display:grid;grid-template-columns:1fr 1fr;gap:3px}
+.mark i{border:2px solid var(--gold);border-radius:3px}
+.mark i:nth-child(2){background:var(--gold);animation:glow 3s ease-in-out infinite}
+@keyframes glow{50%{opacity:.45}}
 h1{font:700 clamp(32px,6vw,62px)/1.05 Fraunces,serif;margin:28px 0 16px;max-width:20ch;letter-spacing:-.01em}
 h1 em{font-style:normal;background:linear-gradient(90deg,var(--gold),var(--gold2),var(--gold));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s ease-in-out infinite}
 @keyframes shine{50%{background-position:100% 0}}

@@ -77,7 +77,7 @@
 
   renderMatrix(); renderLenses();
 
-  // Animated background: slowly rotating 8-point star lattice
+  // Animated background: slowly rotating square lattice
   const cv = $("#bg"), ctx = cv.getContext("2d");
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let W, H, DPR;
@@ -85,7 +85,7 @@
   addEventListener("resize", size); size();
   function star(x, y, r, a, alpha) {
     ctx.strokeStyle = `rgba(214,180,106,${alpha})`;
-    for (const off of [0, Math.PI / 4]) {
+    for (const off of [0]) {
       ctx.beginPath();
       for (let k = 0; k < 4; k++) {
         const t = a + off + k * Math.PI / 2;
