@@ -16,13 +16,13 @@
       return `<tr data-i="${n}" class="${n === active ? "active" : ""}" style="animation-delay:${d}ms" tabindex="0">
         <td>${n + 1}</td>
         <td class="left">${esc(it.name)}<small>${esc(it.note || "")}</small></td>
-        <td>${chip(it.pain, MARK[it.pain], d + 120)}</td>
-        <td>${chip(it.value, MARK[it.value], d + 170)}</td>
-        <td>${chip(it.target, MARK[it.target], d + 220)}</td>
-        <td>${chip(it.growth, MARK[it.growth], d + 270)}</td>
-        <td>${chip(r.isl.cls, r.isl.label, d + 320)}</td>
-        <td>${chip(r.comp.cls, r.comp.label, d + 370)}</td>
-        <td><span class="ring" style="--c:${color(r.sibr / 100)}" data-p="${r.sibr}"><span>${r.sibr}</span></span></td>
+        <td data-label="Pain">${chip(it.pain, MARK[it.pain], d + 120)}</td>
+        <td data-label="Value">${chip(it.value, MARK[it.value], d + 170)}</td>
+        <td data-label="Target">${chip(it.target, MARK[it.target], d + 220)}</td>
+        <td data-label="Growth">${chip(it.growth, MARK[it.growth], d + 270)}</td>
+        <td data-label="Islamic">${chip(r.isl.cls, r.isl.label, d + 320)}</td>
+        <td data-label="Comp.">${chip(r.comp.cls, r.comp.label, d + 370)}</td>
+        <td class="sibr"><span class="ring" style="--c:${color(r.sibr / 100)}" data-p="${r.sibr}"><span>${r.sibr}</span></span></td>
       </tr>`;
     }).join("");
     requestAnimationFrame(() => setTimeout(() => document.querySelectorAll(".ring").forEach(el => el.style.setProperty("--p", el.dataset.p)), 60));
