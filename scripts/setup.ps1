@@ -34,6 +34,12 @@ if (-not (Select-String -Path $envFile -Pattern '^SIBR_API_KEY=.+' -Quiet)) {
     Add-Content $envFile "`nSIBR_API_KEY=$key"
     Write-Host "Access key written to server\.env: $key"
 }
+# A separate admin key for the live request log at /logs (keep this one to yourself).
+if (-not (Select-String -Path $envFile -Pattern '^SIBR_ADMIN_KEY=.+' -Quiet)) {
+    $admin = -join ((48..57) + (97..122) | Get-Random -Count 24 | ForEach-Object { [char]$_ })
+    Add-Content $envFile "SIBR_ADMIN_KEY=$admin"
+    Write-Host "Admin key for http://localhost:8787/logs written to server\.env: $admin"
+}
 
 Write-Host "== Ollama (free local LLM)"
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
