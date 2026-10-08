@@ -1,0 +1,6 @@
+fastapi>=0.110
+uvicorn[standard]>=0.27
+httpx>=0.27
+# Laya in-process (SIBR_LAYA_MODE=local). Pulls torch + transformers; skip it when
+# pointing SIBR_LAYA_MODE=http at a separate laya-serve.
+laya>=0.4.1

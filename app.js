@@ -3,6 +3,7 @@
   const $ = s => document.querySelector(s);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const MARK = { g: "✓", m: "~", b: "✕" };
+  const API = (new URLSearchParams(location.search).get("api") || window.SIBR_API || "").replace(/\/$/, "");
   const color = v => v >= .7 ? "var(--good)" : v >= .45 ? "var(--mid)" : "var(--bad)";
 
   let results = SEED.map(i => evaluate({ ...i }));
@@ -45,7 +46,7 @@
       </div>`).join("");
     requestAnimationFrame(() => setTimeout(() => document.querySelectorAll(".bar i").forEach(b => b.style.width = b.dataset.w + "%"), 40));
     const isl = r.idea.islamicNotes || [];
-    $("#best").innerHTML = `Strongest fit: ${r.top.map(t => `<b>${esc(t.name)}</b> <small>(${t.group})</small>`).join(" · ")}` +
+    $("#best").innerHTML = (r.idea.summary ? `${esc(r.idea.summary)}<br>` : "") + `Strongest fit: ${r.top.map(t => `<b>${esc(t.name)}</b> <small>(${t.group})</small>`).join(" · ")}` +
       (isl.length ? `<br>Islamic review flags: ${isl.map(esc).join("; ")}` : "");
     document.querySelectorAll(".cell").forEach(c => c.addEventListener("click", () => openCell(c.dataset.g, c.dataset.id)));
   }
@@ -57,19 +58,36 @@
       <h3>${esc(s.name)}</h3>
       <div class="hint">${esc(r.idea.name)}</div>
       <div class="big" style="color:${color(s.fit)}">${Math.round(s.fit * 100)}</div>
+      ${s.analysis ? `<p>${esc(s.analysis)}</p>` : ""}
       <ul>${s.why.map(w => `<li>${esc(w)}</li>`).join("")}</ul>
-      <p class="note">Heuristic estimate. In the full engine this cell is backed by evidence (reviews, forums, competitors) and a calibrated Laya verdict.</p>`;
+      ${r.meta && r.meta.engine === "laya"
+        ? `<p class="note">Laya verdict${s.confidence != null ? `, confidence ${Math.round(s.confidence * 100)}%` : ""}.${s.escalate ? " <b>Low confidence: needs a human check.</b>" : ""} Evidence pull (reviews, forums, competitors) is not wired in yet.</p>`
+        : `<p class="note">Heuristic estimate${r.fallback ? ` (model service unreachable: ${esc(r.fallback)})` : ""}. With the model service connected this cell is a calibrated Laya verdict.</p>`}`;
     $("#drawer").classList.add("open");
     $("#drawer").setAttribute("aria-hidden", "false");
   }
   $("#closeDrawer").addEventListener("click", () => { $("#drawer").classList.remove("open"); $("#drawer").setAttribute("aria-hidden", "true"); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") $("#closeDrawer").click(); });
 
-  $("#ideaForm").addEventListener("submit", e => {
+  async function remote(text) {
+    const res = await fetch(API + "/evaluate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ idea: text }) });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "HTTP " + res.status);
+    return res.json();
+  }
+
+  $("#ideaForm").addEventListener("submit", async e => {
     e.preventDefault();
     const v = $("#ideaInput").value.trim();
-    if (!v) return;
-    results.unshift(evaluate(fromText(v)));
+    const btn = $("#ideaForm button");
+    if (!v || btn.disabled) return;
+    let r;
+    if (API) {
+      btn.disabled = true; btn.dataset.label = btn.innerHTML; btn.textContent = "Running Laya…";
+      try { r = await remote(v); }
+      catch (err) { r = evaluate(fromText(v)); r.fallback = err.message; }
+      finally { btn.disabled = false; btn.innerHTML = btn.dataset.label; }
+    } else r = evaluate(fromText(v));
+    results.unshift(r);
     active = 0;
     $("#ideaInput").value = "";
     renderMatrix(); renderLenses();
