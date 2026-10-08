@@ -37,6 +37,8 @@ class Settings:
     llm_base_url: str = field(default_factory=lambda: os.getenv("SIBR_LLM_BASE_URL", ""))
     llm_model: str = field(default_factory=lambda: os.getenv("SIBR_LLM_MODEL", ""))
     llm_api_key: str = field(default_factory=lambda: os.getenv("SIBR_LLM_API_KEY", ""))
+    # Sent as reasoning_effort when set. Thinking models such as qwen3 need "none" to answer in JSON.
+    llm_reasoning: str = field(default_factory=lambda: os.getenv("SIBR_LLM_REASONING", ""))
     llm_timeout: float = field(default_factory=lambda: float(os.getenv("SIBR_LLM_TIMEOUT", "60")))
 
     # local: load Laya in-process (pip install laya). http: call a laya-serve URL.

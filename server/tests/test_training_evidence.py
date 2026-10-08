@@ -70,3 +70,31 @@ def test_evidence_failure_is_silent():
     assert Broken("ddg").pull("x idea", {"name": "x"}) == []
     assert Evidence("off").pull("x idea", {"name": "x"}) == []
     assert digest([]) == ""
+
+
+def test_relabel_marks_where_teachers_disagree(tmp_path, monkeypatch):
+    class Teacher:  # the second teacher grades pain 0 where the first said 2
+        enabled, last_error = True, None
+
+        def __init__(self, settings):
+            pass
+
+        def describe(self):
+            return {"model": "second"}
+
+        def chat_json(self, system, user, max_tokens=700):
+            return {**RAW, "pain": 0}
+
+    monkeypatch.setattr(md, "DATA", tmp_path)
+    monkeypatch.setattr(md, "LLM", Teacher)
+    monkeypatch.setattr(md, "gold_ideas", set)
+    card, lab = md.clean(RAW)
+    first = [{"idea": f"idea {i}", "card": card, "labels": lab, "seg_ids": ["fin", "dia"]} for i in range(3)]
+    (tmp_path / "labels.jsonl").write_text("".join(json.dumps(r) + "\n" for r in first))
+    md.main(["--labels", "second.jsonl", "--relabel-from", "labels.jsonl"])
+    md.main(["--labels", "second.jsonl", "--relabel-from", "labels.jsonl"])  # resumes: nothing left to re-grade
+    second = md.read_labels(tmp_path / "second.jsonl")
+    assert len(second) == 3 and second[0]["labels"]["pain"] == 0 and second[0]["seg_ids"] == ["fin", "dia"]
+    review = (tmp_path / "review.csv").read_text().splitlines()
+    assert review[0].endswith(",disagree") and all(r.endswith(",pain") for r in review[1:])
+    assert md.read_review()[0]["labels"]["pain"] == 0

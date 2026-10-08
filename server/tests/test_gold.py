@@ -15,11 +15,13 @@ def test_gold_build_score_and_training_leaves_gold_out(tmp_path, monkeypatch):
         {"path": "/evaluate", "status": 200, "note": "x" * 100 + "…"},  # cut note: skipped
         {"path": "/evaluate", "status": 401, "note": "Denied idea that never ran"},
         {"path": "/evaluate", "status": 200, "detail": {"idea": "Tutoring marketplace   for Arabic learners"}},
+        {"path": "/evaluate", "status": 200, "detail": {"request": {"idea": "Halal travel planner for families"}}},
         {"path": "/health", "status": 200},
     ]
     logs.write_text("\n".join(json.dumps(e) for e in entries) + "\nnot json\n")
     monkeypatch.setattr(gold, "LOGS", logs)
-    assert gold.log_ideas(logs) == ["A halal meal kit for busy nurses", "Tutoring marketplace for Arabic learners"]
+    assert gold.log_ideas() == ["A halal meal kit for busy nurses", "Tutoring marketplace for Arabic learners",
+                                "Halal travel planner for families"]
 
     card, lab = md.clean({"name": "n", "pain": 2, "value": 1, "target": 0, "growth": 1, "comp": "open",
                           "islamic": "ok", "tags": [], "segments": []})
