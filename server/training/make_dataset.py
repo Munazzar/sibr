@@ -66,7 +66,8 @@ def gen_ideas(llm: LLM, n: int, have: set, rng: random.Random):
             "each a one-line idea under 15 words).",
             f"Give 8 varied ideas: a {model} about {TAGS[tag]}, aimed at {SEG_IDS[sid][1]}. "
             f"Include some weak or flawed ideas.", max_tokens=500)
-        ideas = [i.strip() for i in (data or {}).get("ideas", []) if isinstance(i, str) and len(i.strip()) > 8]
+        raw = data if isinstance(data, list) else (data or {}).get("ideas", [])  # a bare list is fine too
+        ideas = [i.strip() for i in raw if isinstance(i, str) and len(i.strip()) > 8]
         fresh = [i for i in ideas if i.lower() not in have]
         misses = misses + 1 if not fresh else 0
         for i in fresh:

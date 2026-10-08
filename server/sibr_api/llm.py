@@ -52,11 +52,13 @@ class LLM:
 
 
 def parse_json(text: str) -> Optional[Any]:
-    """Pull the first JSON object out of a model reply (handles ```json fences and chatter)."""
-    m = re.search(r"\{.*\}", text, re.S)
-    if not m:
-        return None
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return None
+    """Pull JSON out of a model reply (handles ```json fences and chatter). Prefers an object;
+    a bare list (small models often reply with one) comes back as a list."""
+    for pattern in (r"\{.*\}", r"\[.*\]"):
+        m = re.search(pattern, text, re.S)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except json.JSONDecodeError:
+                pass
+    return None
