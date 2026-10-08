@@ -21,6 +21,8 @@ powershell -ExecutionPolicy Bypass -File scripts\start.ps1
 
 `setup.ps1` builds `server\.venv`, installs everything, generates an access key in `server\.env`, pulls `llama3.2:3b` and downloads the Laya checkpoint. `start.ps1` runs the service, which also serves the site, on `http://localhost:8787/` and listens on this computer only.
 
+To have Sibr start by itself whenever you sign in to Windows, run `scripts\autostart.ps1` once (`-Off` turns it off).
+
 ## Use it from your other devices (Tailscale)
 
 ```
