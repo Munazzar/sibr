@@ -21,12 +21,21 @@ from pathlib import Path
 from sibr_api.config import Settings
 from sibr_api.llm import LLM
 from sibr_api.pipeline import CARD_FIELDS, COMP_Q, ISL_Q, QUESTIONS, SCORES
-from sibr_api.segments import SEGMENTS, TAGS
+from sibr_api.segments import LEGACY_IDS, SEGMENTS, TAGS
 
 DATA = Path(__file__).resolve().parent / "data"
 SEG_IDS = {sid: (name, who) for segs in SEGMENTS.values() for sid, name, _m, who in segs}
 MODELS = ["subscription app", "marketplace", "B2B service", "physical product", "course or community",
           "agency", "SaaS tool", "nonprofit-style program"]
+
+# Segments the teacher grades per idea. A sample keeps the prompt short for small local LLMs
+# and keeps each training row under laya-serve's 64-question limit (22 core + 30 segments).
+SEGS_PER_IDEA = 30
+
+
+def label_prompt(seg_ids) -> str:
+    return LABEL_PROMPT.replace("{segments}", ", ".join(f"{sid} = {SEG_IDS[sid][1]}" for sid in seg_ids))
+
 
 LABEL_PROMPT = (
     "You are a strict startup analyst. Given a business idea, write its idea card and grade it. "
@@ -36,8 +45,7 @@ LABEL_PROMPT = (
     "comp (one of " + ", ".join(f"{k} = {v}" for k, v in COMP_Q["criteria"].items()) + "); "
     "islamic (one of " + ", ".join(f"{k} = {v}" for k, v in ISL_Q["criteria"].items()) + "); "
     "tags (list, any of: " + ", ".join(TAGS) + "); "
-    "segments (list of the segment ids that would want this and pay for it, any of: " +
-    ", ".join(f"{sid} = {who}" for sid, (_n, who) in SEG_IDS.items()) + "). "
+    "segments (list of the segment ids that would want this and pay for it, any of: {segments}). "
     "Be critical: most ideas are not strong on every dimension.")
 
 
@@ -74,17 +82,20 @@ def clean(raw: dict):
     return card, lab
 
 
-def to_row(idea: str, card: dict, lab: dict) -> dict:
+def to_row(idea: str, card: dict, lab: dict, seg_ids=None) -> dict:
+    """Only the segments the teacher was asked about become questions: a segment it never saw
+    is unknown, not a "no". Records from before the audience expansion used the core 21."""
+    seg_ids = [s for s in (seg_ids or LEGACY_IDS) if s in SEG_IDS]
     expected = {k: lab[k] for k in SCORES}
     expected.update(comp=lab["comp"], islamic=lab["islamic"])
     expected.update({f"tag_{t}": t in lab["tags"] for t in TAGS})
-    expected.update({f"seg_{s}": s in lab["segments"] for s in SEG_IDS})
+    expected.update({f"seg_{s}": s in lab["segments"] for s in seg_ids})
     state = {"idea": idea, **{k: v for k, v in card.items() if v}}
-    return {"state": state, "questions": QUESTIONS, "expected": expected}
+    return {"state": state, "questions": {k: QUESTIONS[k] for k in expected}, "expected": expected}
 
 
 def write_splits(records, eval_frac: float, seed: int):
-    rows = [to_row(r["idea"], r["card"], r["labels"]) for r in records]
+    rows = [to_row(r["idea"], r["card"], r["labels"], r.get("seg_ids")) for r in records]
     random.Random(seed).shuffle(rows)
     k = max(1, int(len(rows) * eval_frac))
     for name, part in (("eval", rows[:k]), ("train", rows[k:])):
@@ -93,7 +104,8 @@ def write_splits(records, eval_frac: float, seed: int):
     print(f"wrote {len(rows) - k} train / {k} eval rows to {DATA}")
 
 
-CSV_COLS = ["keep", "idea", "name", *CARD_FIELDS, *SCORES, "comp", "islamic", "tags", "segments"]
+# seg_ids: the segments the teacher was asked about; "segments" lists the ones it said yes to.
+CSV_COLS = ["keep", "idea", "name", *CARD_FIELDS, *SCORES, "comp", "islamic", "tags", "segments", "seg_ids"]
 
 
 def write_review(records):
@@ -102,7 +114,8 @@ def write_review(records):
         w.writeheader()
         for r in records:
             w.writerow({"keep": 1, "idea": r["idea"], **r["card"], **{k: r["labels"][k] for k in [*SCORES, "comp", "islamic"]},
-                        "tags": " ".join(r["labels"]["tags"]), "segments": " ".join(r["labels"]["segments"])})
+                        "tags": " ".join(r["labels"]["tags"]), "segments": " ".join(r["labels"]["segments"]),
+                        "seg_ids": " ".join(r.get("seg_ids") or LEGACY_IDS)})
 
 
 def read_review():
@@ -115,7 +128,8 @@ def read_review():
             if parsed is None:
                 print("skipping invalid row:", row["idea"])
                 continue
-            out.append({"idea": row["idea"], "card": parsed[0], "labels": parsed[1]})
+            out.append({"idea": row["idea"], "card": parsed[0], "labels": parsed[1],
+                        "seg_ids": (row.get("seg_ids") or "").split() or list(LEGACY_IDS)})
     return out
 
 
@@ -147,10 +161,12 @@ def main(argv=None):
             if not batch:
                 raise SystemExit(f"LLM stopped returning ideas ({llm.last_error or 'empty replies'}).")
             for idea in batch:
-                parsed = clean(llm.chat_json(LABEL_PROMPT, f"Idea: {idea}", max_tokens=600) or {})
+                seg_ids = sorted(rng.sample(list(SEG_IDS), min(SEGS_PER_IDEA, len(SEG_IDS))))
+                parsed = clean(llm.chat_json(label_prompt(seg_ids), f"Idea: {idea}", max_tokens=600) or {})
                 if parsed is None:
                     continue
-                rec = {"idea": idea, "card": parsed[0], "labels": parsed[1]}
+                parsed[1]["segments"] = [s for s in parsed[1]["segments"] if s in seg_ids]
+                rec = {"idea": idea, "card": parsed[0], "labels": parsed[1], "seg_ids": seg_ids}
                 records.append(rec)
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 f.flush()

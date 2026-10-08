@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO)
 
 SITE = Path(__file__).resolve().parents[2]
 # Only these files are served, so nothing else in the repo (like server/.env) is reachable.
-SITE_FILES = {"index.html", "app.js", "engine.js", "styles.css"}
+SITE_FILES = {"index.html", "app.js", "engine.js", "segments.js", "styles.css"}
 
 
 class EvaluateIn(BaseModel):

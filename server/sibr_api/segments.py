@@ -1,39 +1,17 @@
-"""Lens definitions. Mirrors SEGMENTS / TAGS / FLAGS in ../engine.js so the
-browser fallback and the model service score the same grid."""
+"""Lens definitions. segments.json is the one source for audience segments and presets; the
+site reads the same data from ../segments.js, which `python -m sibr_api.segments` regenerates.
+TAGS / FLAGS mirror ../engine.js so the browser fallback and the model service agree."""
+import json
 import re
+from pathlib import Path
 
-# id, name, market multiplier (spending power), and a description Laya reads.
-SEGMENTS = {
-    "Geography": [
-        ("us", "United States", 1.0, "consumers and businesses in the United States"),
-        ("uk", "United Kingdom", .85, "consumers and businesses in the United Kingdom"),
-        ("gcc", "Gulf (GCC)", .95, "consumers and businesses in Saudi Arabia, the UAE, Qatar and the Gulf"),
-        ("sa", "South Asia", .6, "consumers and businesses in India, Pakistan and Bangladesh"),
-        ("sea", "Malaysia & Indonesia", .7, "consumers and businesses in Malaysia and Indonesia"),
-        ("af", "Africa (NG, KE, EG)", .5, "consumers and businesses in Nigeria, Kenya and Egypt"),
-    ],
-    "Age group": [
-        ("a1", "18–24", .55, "people aged 18 to 24"),
-        ("a2", "25–34", .85, "people aged 25 to 34"),
-        ("a3", "35–49", 1.0, "people aged 35 to 49"),
-        ("a4", "50+", .8, "people aged 50 and over"),
-    ],
-    "Community": [
-        ("dia", "Muslim diaspora", .85, "Muslims living in Western countries"),
-        ("rev", "New Muslims", .5, "recent converts to Islam"),
-        ("stu", "University students", .45, "university students"),
-        ("sme", "SME owners", 1.0, "owners of small and medium businesses"),
-        ("msq", "Masjids & nonprofits", .6, "mosques, Islamic centres and nonprofits"),
-        ("rem", "Remote workers", .8, "remote workers and digital nomads"),
-    ],
-    "Interest": [
-        ("cre", "Creators", .7, "content creators and influencers"),
-        ("pro", "Productivity", .8, "people focused on productivity and professional growth"),
-        ("fai", "Faith & learning", .65, "people focused on Islamic learning and faith practice"),
-        ("fam", "Family & parenting", .75, "parents and families"),
-        ("fin", "Halal finance", .85, "people looking for halal finance and investing"),
-    ],
-}
+_DATA = json.loads((Path(__file__).with_name("segments.json")).read_text(encoding="utf-8"))
+
+# group -> [(id, name, market multiplier (spending power), description Laya reads)]
+SEGMENTS = {g["name"]: [(x["id"], x["name"], x["m"], x["who"]) for x in g["segments"]] for g in _DATA["groups"]}
+PRESETS = _DATA["presets"]
+# The original 21 segments. The first teacher dataset was labelled on these only.
+LEGACY_IDS = next(p["ids"] for p in PRESETS if p["id"] == "core")
 
 TAGS = {
     "video": "video, editing, short-form clips or podcasts",
@@ -72,3 +50,14 @@ def keyword_flags(text: str):
     hits = [(lvl, note) for rx, lvl, note in FLAGS if re.search(rx, text, re.I)]
     worst = max((lvl for lvl, _ in hits), key=ISLAMIC_ORDER.index, default="ok")
     return worst, [note for _, note in hits]
+
+
+def site_js() -> str:
+    return ("// Generated from server/sibr_api/segments.json by `python -m sibr_api.segments`. Edit that file.\n"
+            "window.SIBR_SEGMENTS = " + json.dumps(_DATA, ensure_ascii=False, separators=(",", ":")) + ";\n")
+
+
+if __name__ == "__main__":
+    out = Path(__file__).resolve().parents[2] / "segments.js"
+    out.write_text(site_js(), encoding="utf-8")
+    print("wrote", out)

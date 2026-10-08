@@ -53,7 +53,23 @@ def good_llm(request):
 
 
 def test_question_budget_fits_laya_serve_limit():
-    assert len(QUESTIONS) <= 64
+    from sibr_api.pipeline import questions_for
+    assert len(questions_for(None)) <= 64  # default run: core questions + the core 21 segments
+
+
+def test_big_audience_is_split_into_calls():
+    from sibr_api.pipeline import MAX_PER_CALL, SEGMENT_IDS
+
+    class LimitedLaya(FakeLaya):
+        def predict(self, state, questions):
+            assert len(questions) <= MAX_PER_CALL
+            return super().predict(state, questions)
+
+    laya = LimitedLaya()
+    r = Pipeline(laya, llm_with(good_llm)).evaluate("halal investing app", SEGMENT_IDS)
+    assert len(laya.calls) == 2 and len(QUESTIONS) > MAX_PER_CALL
+    assert sum(len(cs) for cs in r["lenses"].values()) == len(SEGMENT_IDS)
+    assert "2 passes" in r["meta"]["steps"][2]["detail"]
 
 
 def test_end_to_end_with_llm():
@@ -167,3 +183,10 @@ def test_api_passes_segments():
     assert [k for k in laya.calls[0][1] if k.startswith("seg_")] == ["seg_us"]
     client.post("/evaluate", json={"idea": "halal investing app"})
     assert sum(k.startswith("seg_") for k in laya.calls[1][1]) == 21
+
+
+def test_site_segments_js_is_current():
+    from pathlib import Path
+    from sibr_api.segments import site_js
+    js = Path(__file__).resolve().parents[2] / "segments.js"
+    assert js.read_text(encoding="utf-8") == site_js(), "run: python -m sibr_api.segments"

@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from .evidence import Evidence, digest
 from .llm import LLM
-from .segments import ISLAMIC_ORDER, SEGMENTS, TAGS, keyword_flags
+from .segments import ISLAMIC_ORDER, LEGACY_IDS, SEGMENTS, TAGS, keyword_flags
 
 LEVEL = {"g": 1.0, "m": 0.55, "b": 0.15}
 ISL = {"ok": {"label": "YES", "cls": "g", "v": 1}, "cond": {"label": "YES*", "cls": "m", "v": .7},
@@ -76,10 +76,30 @@ QUESTIONS = build_questions()
 SEGMENT_IDS = [sid for segs in SEGMENTS.values() for sid, *_ in segs]
 
 
+# laya-serve answers at most 64 questions per call; bigger audiences go in several calls.
+MAX_PER_CALL = 64
+
+
 def questions_for(segments: Optional[List[str]]) -> Dict[str, Any]:
-    """All questions, minus the segment questions the person filtered out before the run."""
-    keep = set(segments or SEGMENT_IDS)
+    """The core questions plus one per audience segment picked for the run (default: the core 21)."""
+    keep = set(segments or LEGACY_IDS)
     return {k: q for k, q in QUESTIONS.items() if not k.startswith("seg_") or k[4:] in keep}
+
+
+def predict_batched(laya, state: Dict[str, Any], questions: Dict[str, Any]) -> Dict[str, Any]:
+    """One call when the questions fit, else the core questions plus as many segments as fit,
+    then the remaining segments in further calls on the same state. Answers are merged."""
+    if len(questions) <= MAX_PER_CALL:
+        return laya.predict(state, questions)
+    core = {k: q for k, q in questions.items() if not k.startswith("seg_")}
+    segs = [k for k in questions if k.startswith("seg_")]
+    first = MAX_PER_CALL - len(core)
+    chunks = [segs[:first]] + [segs[i:i + MAX_PER_CALL] for i in range(first, len(segs), MAX_PER_CALL)]
+    res = laya.predict(state, {**core, **{k: questions[k] for k in chunks[0]}})
+    answers = dict(res.get("answers", {}))
+    for chunk in chunks[1:]:
+        answers.update(laya.predict(state, {k: questions[k] for k in chunk}).get("answers", {}))
+    return {**res, "answers": answers, "calls": len(chunks)}
 
 
 class Pipeline:
@@ -109,12 +129,12 @@ class Pipeline:
             "overall verdict. Never give religious rulings. Keys: summary (string), cells (object mapping "
             "segment id to sentence).",
             f"Idea: {text}\nCard: {card}\n" + (f"Web evidence: {ev}\n" if ev else "") + f"Segments:\n{listing}",
-            max_tokens=1200)
+            max_tokens=min(4000, 400 + 45 * len(cells)))
         return data if isinstance(data, dict) else {}
 
     def evaluate(self, text: str, segments: Optional[List[str]] = None) -> Dict[str, Any]:
         text = text.strip()
-        segments = [s for s in SEGMENT_IDS if s in set(segments or [])] or SEGMENT_IDS
+        segments = [s for s in SEGMENT_IDS if s in set(segments or [])] or list(LEGACY_IDS)
         questions = questions_for(segments)
         steps: List[Dict[str, Any]] = []
 
@@ -138,10 +158,11 @@ class Pipeline:
         if ev:
             state["evidence"] = ev
         t = time.perf_counter()
-        res = self.laya.predict(state, questions)  # raises LayaUnavailable
+        res = predict_batched(self.laya, state, questions)  # raises LayaUnavailable
         a = res.get("answers", {})
         laya_model = (res.get("routing") or {}).get("model") or res.get("model")
-        step("Laya verdicts", t, True, f"{len(questions)} typed questions ({len(segments)} audience segments) in one pass on the {laya_model} checkpoint" +
+        step("Laya verdicts", t, True, f"{len(questions)} typed questions ({len(segments)} audience segments) in "
+             f"{res.get('calls', 1)} pass{'es' if res.get('calls', 1) > 1 else ''} on the {laya_model} checkpoint" +
              ("" if len(text) <= LAYA_IDEA_CHARS else f"; long idea trimmed to {LAYA_IDEA_CHARS} characters plus the card"))
 
         dims = {k: float(a[k]["score"]) / (len(SCORES[k][1]) - 1) for k in SCORES}

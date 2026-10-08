@@ -25,9 +25,15 @@ def test_clean_and_row_match_questions():
     card, lab = md.clean(RAW)
     assert lab["value"] == 1 and lab["tags"] == ["finance"] and lab["segments"] == ["dia", "fin"]
     row = md.to_row("halal investing", card, lab)
-    assert set(row["expected"]) == set(QUESTIONS)
+    # an old record: the core 21 segments only, so new segments are not labelled "no"
+    assert set(row["expected"]) == set(row["questions"])
+    assert sum(k.startswith("seg_") for k in row["expected"]) == 21 and "seg_mod" not in row["expected"]
     assert row["expected"]["seg_fin"] is True and row["expected"]["seg_us"] is False
     assert row["state"]["solution"] == "s"
+    row = md.to_row("halal investing", card, lab, ["fin", "mod"])
+    assert [k for k in row["expected"] if k.startswith("seg_")] == ["seg_fin", "seg_mod"]
+    assert len(row["questions"]) <= 64
+    assert all(k in QUESTIONS for k in row["questions"])
 
 
 def test_clean_rejects_bad_labels():
@@ -43,6 +49,7 @@ def test_review_roundtrip(tmp_path, monkeypatch):
     (tmp_path / "review.csv").write_text(text)
     recs = md.read_review()
     assert recs[0]["labels"]["islamic"] == "ok"
+    assert len(recs[0]["seg_ids"]) == 21
     md.write_splits(recs * 3, .34, 1)
     rows = [json.loads(l) for l in (tmp_path / "train.jsonl").read_text().splitlines()]
     assert len(rows) == 2 and rows[0]["expected"]["islamic"] == "ok"
