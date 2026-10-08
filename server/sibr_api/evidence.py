@@ -2,14 +2,29 @@
 package, no API key). Results feed Laya's state and the persona pass, and are
 returned to the UI as links. Any failure yields no evidence, never an error."""
 import logging
+import re
 from typing import Dict, List
 
 log = logging.getLogger("sibr.evidence")
 
 
-def queries(card: Dict[str, str]) -> List[str]:
-    name, problem = card.get("name", ""), card.get("problem") or card.get("name", "")
-    return [f"{name} competitors alternatives", f"{problem} reddit", f"{name} reviews"]
+STOP = set("a an the for to of and or in on with by at from app apps platform service tool based "
+           "that this your their who people users".split())
+
+
+def words(text: str) -> set:
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) > 2 and w not in STOP}
+
+
+def queries(idea: str, card: Dict[str, str]) -> List[str]:
+    # Search in the user's own words; the LLM-made name ("Halal Student Invest") matches unrelated brands.
+    solution = card.get("solution") or idea
+    return [f"{idea} competitors", f"{idea} reddit", f"{solution} alternatives"]
+
+
+def relevant(hit: Dict[str, str], keys: set, need: int = 2) -> bool:
+    """Keep a result only when it shares at least `need` content words with the idea."""
+    return len(keys & words(hit["title"] + " " + hit["snippet"])) >= min(need, len(keys))
 
 
 class Evidence:
@@ -21,18 +36,19 @@ class Evidence:
         return [{"title": r.get("title", ""), "url": r.get("href", ""), "snippet": r.get("body", "")}
                 for r in DDGS().text(query, max_results=self.per_query)]
 
-    def pull(self, card: Dict[str, str]) -> List[Dict[str, str]]:
+    def pull(self, idea: str, card: Dict[str, str]) -> List[Dict[str, str]]:
         if self.mode == "off":
             return []
+        keys = words(idea + " " + card.get("problem", ""))
         out, seen = [], set()
-        for q in queries(card):
+        for q in queries(idea, card):
             try:
                 hits = self.search(q)
             except Exception as e:  # missing package, rate limit, network
                 log.warning("evidence search failed for %r: %s", q, e)
                 continue
             for h in hits:
-                if h["url"] and h["url"] not in seen:
+                if h["url"] and h["url"] not in seen and relevant(h, keys):
                     seen.add(h["url"])
                     out.append({**h, "query": q})
         return out

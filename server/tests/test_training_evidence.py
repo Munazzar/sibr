@@ -17,7 +17,8 @@ class FakeEvidence(Evidence):
         super().__init__("ddg")
 
     def search(self, query):
-        return [{"title": "Rival", "url": "https://rival.example", "snippet": "A competitor " + query}]
+        return [{"title": "Rival halal investing", "url": "https://rival.example", "snippet": "A competitor " + query},
+                {"title": "HAL Investments", "url": "https://hal.example", "snippet": "Oilfield services"}]
 
 
 def test_clean_and_row_match_questions():
@@ -50,7 +51,8 @@ def test_review_roundtrip(tmp_path, monkeypatch):
 def test_evidence_feeds_laya_and_response():
     laya = FakeLaya()
     r = Pipeline(laya, llm_with(good_llm), evidence=FakeEvidence()).evaluate("halal investing app")
-    assert len(r["evidence"]) == 1 and r["evidence"][0]["url"] == "https://rival.example"
+    # the unrelated "HAL Investments" hit is filtered out
+    assert [e["url"] for e in r["evidence"]] == ["https://rival.example"]
     assert "Rival" in laya.calls[0][0]["evidence"]
 
 
@@ -58,6 +60,6 @@ def test_evidence_failure_is_silent():
     class Broken(Evidence):
         def search(self, q):
             raise RuntimeError("rate limited")
-    assert Broken("ddg").pull({"name": "x"}) == []
-    assert Evidence("off").pull({"name": "x"}) == []
+    assert Broken("ddg").pull("x idea", {"name": "x"}) == []
+    assert Evidence("off").pull("x idea", {"name": "x"}) == []
     assert digest([]) == ""

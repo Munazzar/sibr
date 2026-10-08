@@ -105,7 +105,7 @@ class Pipeline:
         text = text.strip()
         card = self.idea_card(text)
         state = {"idea": text, **{k: v for k, v in card.items() if v}}
-        ev_items = self.evidence.pull(card)
+        ev_items = self.evidence.pull(text, card)
         ev = digest(ev_items)
         if ev:
             state["evidence"] = ev
