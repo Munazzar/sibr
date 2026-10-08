@@ -2,27 +2,48 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sibr live logs</title>
 <style>
-:root{--bg:#07120f;--card:#0d1f1a;--ink:#e8efe9;--mute:#8fa39b;--line:#1f3a32;--gold:#d6b46a;--ok:#5fc48b;--warn:#e0b04f;--bad:#e06a5f}
+:root{--bg:#07120f;--card:#0d1f1a;--card2:#102822;--ink:#e8efe9;--mute:#8fa39b;--line:#1f3a32;--gold:#d6b46a;--ok:#5fc48b;--warn:#e0b04f;--bad:#e06a5f;--blue:#6fa8dc}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px}
 h1{font-size:20px;margin:0 0 4px}
-.top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
-.mute{color:var(--mute);font-size:13px}
-.stats{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--gold);margin:0 0 6px}
+.top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+.mute{color:var(--mute);font-size:12.5px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin:10px 0 12px}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
 .stat b{display:block;font-size:18px}
 input,select,button{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit}
+input[type=search]{min-width:220px}
 button{cursor:pointer}
 .wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
-table{border-collapse:collapse;width:100%;min-width:760px}
+table{border-collapse:collapse;width:100%;min-width:860px}
 th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--mute);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;background:var(--bg)}
-td.note{max-width:420px;word-break:break-word}
-.s2{color:var(--ok)}.s4{color:var(--warn)}.s5{color:var(--bad)}
+tr.row{cursor:pointer}
+tr.row:hover{background:var(--card)}
+tr.row.open{background:var(--card2)}
+td.note{max-width:440px;word-break:break-word}
+.s2{color:var(--ok)}.s3{color:var(--blue)}.s4{color:var(--warn)}.s5{color:var(--bad)}
+.badge{display:inline-block;font-size:11px;padding:0 6px;border-radius:6px;border:1px solid var(--line);color:var(--mute);margin-left:6px}
+.badge.evaluate{color:var(--gold);border-color:var(--gold)}
 tr.new{animation:flash 1.2s ease-out}
 @keyframes flash{from{background:rgba(214,180,106,.25)}to{background:transparent}}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px}
 .dot.off{background:var(--bad)}
+td.panel{background:var(--card2);padding:12px 14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;margin:0}
+dt{color:var(--mute)}dd{margin:0;word-break:break-word}
+.idea{white-space:pre-wrap;max-height:220px;overflow:auto;background:var(--bg);border-radius:8px;padding:8px;margin-top:4px}
+.step{display:grid;grid-template-columns:120px 1fr 64px;gap:8px;align-items:center;margin:4px 0}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--gold)}
+.bar i.fail{background:var(--bad)}
+.stepd{grid-column:1/-1;color:var(--mute);font-size:12px;margin:-2px 0 4px}
+.chip{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:1px 8px;margin:2px 4px 2px 0;font-size:12px}
+.big{font-size:26px;font-weight:700;color:var(--gold)}
 #login{max-width:420px;margin:40px auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
 #login input{width:100%;margin:8px 0}
 </style></head>
@@ -36,21 +57,33 @@ tr.new{animation:flash 1.2s ease-out}
 </div>
 <main id="main" hidden>
   <div class="top">
-    <div><h1>Sibr live logs</h1><div class="mute"><span id="dot" class="dot"></span><span id="status">Connecting…</span></div></div>
-    <div>
-      <select id="filter"><option value="">All requests</option><option value="/evaluate">Evaluations only</option><option value="tailscale">Via Tailscale only</option><option value="err">Errors (4xx/5xx)</option></select>
+    <div><h1>Sibr live logs</h1><div class="mute"><span id="dot" class="dot"></span><span id="status">Connecting…</span> · click any row for full details</div></div>
+    <div class="tools">
+      <input id="q" type="search" placeholder="Search idea, person, IP, path…">
+      <select id="filter">
+        <option value="api">Evaluations &amp; API (hide page files)</option>
+        <option value="eval">Evaluations only</option>
+        <option value="tailscale">From other devices (Tailscale)</option>
+        <option value="err">Errors &amp; denied</option>
+        <option value="">Everything</option>
+      </select>
       <button id="pause">Pause</button>
+      <button id="dl">Download</button>
     </div>
   </div>
   <div class="stats">
     <div class="stat"><b id="nTotal">0</b><span class="mute">requests</span></div>
-    <div class="stat"><b id="nEval">0</b><span class="mute">evaluations</span></div>
-    <div class="stat"><b id="nTs">0</b><span class="mute">via Tailscale</span></div>
-    <div class="stat"><b id="nErr">0</b><span class="mute">errors / denied</span></div>
+    <div class="stat"><b id="nEval">0</b><span class="mute">evaluations run</span></div>
+    <div class="stat"><b id="nOk">0</b><span class="mute">succeeded</span></div>
+    <div class="stat"><b id="nDenied">0</b><span class="mute">denied (bad key)</span></div>
+    <div class="stat"><b id="nErr">0</b><span class="mute">failed</span></div>
+    <div class="stat"><b id="nDev">0</b><span class="mute">devices / people</span></div>
     <div class="stat"><b id="avg">–</b><span class="mute">avg evaluation</span></div>
+    <div class="stat"><b id="slow">–</b><span class="mute">slowest evaluation</span></div>
+    <div class="stat"><b id="avgS">–</b><span class="mute">avg Sibr score</span></div>
   </div>
   <div class="wrap"><table>
-    <thead><tr><th>Time</th><th>From</th><th>Request</th><th>Status</th><th>Took</th><th>Details</th></tr></thead>
+    <thead><tr><th>Time</th><th>From</th><th>Request</th><th>Result</th><th>Took</th><th>Details</th></tr></thead>
     <tbody id="rows"></tbody>
   </table></div>
 </main>
@@ -58,35 +91,126 @@ tr.new{animation:flash 1.2s ease-out}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 let key = "", since = 0, paused = false, all = [];
+const open = new Set();
 try {
   const q = new URLSearchParams(location.search).get("admin");
   if (q) { localStorage.setItem("sibrAdmin", q); history.replaceState(null, "", location.pathname); }
   key = localStorage.getItem("sibrAdmin") || "";
 } catch (e) {}
 
-function why(s) {
-  return s === 401 ? "denied: wrong or missing key" : s === 422 ? "rejected: bad input" : s === 503 ? "Laya unavailable" : s >= 500 ? "server error" : "";
+const MEANING = {200: "OK", 204: "OK", 304: "not changed", 401: "denied: wrong or missing key", 403: "forbidden",
+  404: "not found", 405: "method not allowed", 422: "rejected: invalid input", 500: "server error", 503: "Laya unavailable"};
+function kind(e) {
+  if (e.kind) return e.kind;
+  if (e.method === "OPTIONS") return "preflight";
+  if (e.path === "/evaluate" || e.path === "/health") return e.path.slice(1);
+  return e.path.startsWith("/logs") ? "logs" : "page";
+}
+const isEval = e => e.method === "POST" && e.path === "/evaluate";
+function device(ua) {
+  if (!ua) return "";
+  if (/WindowsPowerShell/i.test(ua)) return "PowerShell";
+  if (/curl|python|httpx|testclient/i.test(ua)) return ua.split(/[\s/]/)[0];
+  const b = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /SamsungBrowser/.test(ua) ? "Samsung Internet" :
+    /Firefox\//.test(ua) ? "Firefox" : /CriOS|Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
+  const o = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" :
+    /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+  return o ? `${b} on ${o}` : b;
+}
+const took = ms => ms >= 1000 ? (ms / 1000).toFixed(1) + " s" : ms + " ms";
+const bytes = n => !n ? "–" : n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : n > 1024 ? (n / 1024).toFixed(1) + " KB" : n + " B";
+function ago(t) {
+  const s = (Date.now() - new Date(t).getTime()) / 1000;
+  return s < 60 ? "just now" : s < 3600 ? Math.floor(s / 60) + " min ago" : s < 86400 ? Math.floor(s / 3600) + " h ago" : Math.floor(s / 86400) + " d ago";
+}
+function who(e) { return e.via === "tailscale" ? (e.name || e.who || e.ip) : "this PC"; }
+function summary(e) {
+  const d = e.detail || {};
+  const k = kind(e);
+  if (k === "preflight") return "Browser permission check (CORS) before calling Sibr from another site";
+  const parts = [];
+  if (e.status >= 400) parts.push(d.error || MEANING[e.status] || "error");
+  if (e.note) parts.push(e.note);
+  if (d.result && d.result.name) parts.push(`"${d.result.name}" · ${d.result.islamic || ""} · ${d.result.competition || ""}`);
+  return parts.join(" · ");
 }
 function row(e, fresh) {
-  const cls = "s" + String(e.status)[0];
-  const from = e.via === "tailscale" ? `${esc(e.who || e.ip)}<div class="mute">Tailscale</div>` : `this PC<div class="mute">${esc(e.ip)}</div>`;
-  const took = e.ms >= 1000 ? (e.ms / 1000).toFixed(1) + " s" : e.ms + " ms";
-  return `<tr class="${fresh ? "new" : ""}"><td>${esc(e.time.replace("T", " "))}</td><td>${from}</td><td>${esc(e.method)} ${esc(e.path)}</td>` +
-    `<td class="${cls}">${e.status}</td><td>${took}</td><td class="note">${esc([why(e.status), e.note].filter(Boolean).join(" · "))}</td></tr>`;
+  const d = e.detail || {}, k = kind(e);
+  const from = e.via === "tailscale"
+    ? `${esc(e.name || e.who || e.ip)}<div class="mute">${esc([device(d.ua), "Tailscale " + e.ip].filter(Boolean).join(" · "))}</div>`
+    : `this PC<div class="mute">${esc([device(d.ua), e.ip].filter(Boolean).join(" · "))}</div>`;
+  return `<tr class="row ${fresh ? "new" : ""} ${open.has(e.id) ? "open" : ""}" data-id="${e.id}">` +
+    `<td>${esc(e.time.slice(11))}<div class="mute">${esc(e.time.slice(0, 10))} · ${ago(e.time)}</div></td>` +
+    `<td>${from}</td><td>${esc(e.method)} ${esc(e.path)}<span class="badge ${k}">${k}</span></td>` +
+    `<td class="s${String(e.status)[0]}">${e.status}<div class="mute">${esc(MEANING[e.status] || "")}</div></td>` +
+    `<td>${took(e.ms)}</td><td class="note">${esc(summary(e))}</td></tr>` +
+    (open.has(e.id) ? `<tr><td class="panel" colspan="6">${panel(e)}</td></tr>` : "");
 }
+function panel(e) {
+  const d = e.detail || {}, rq = d.request, rs = d.result;
+  const boxes = [];
+  if (rq) {
+    const aud = rq.mode === "picked" ? `${rq.segments.length} picked: ${rq.segments.slice(0, 40).join(", ")}${rq.segments.length > 40 ? "…" : ""}` : rq.mode;
+    boxes.push(`<div class="box"><h3>What was asked</h3><dl>
+      <dt>Idea</dt><dd>${rq.chars} characters</dd><dt>Audiences</dt><dd>${esc(aud)}</dd>
+      ${rq.custom.length ? `<dt>Their own</dt><dd>${rq.custom.map(c => `<span class="chip">${esc(c)}</span>`).join("")}</dd>` : ""}
+      <dt>Access key</dt><dd>${esc(rq.key)}</dd></dl><div class="idea">${esc(rq.idea)}</div></div>`);
+  }
+  if (rs) {
+    const sc = rs.scores || {};
+    boxes.push(`<div class="box"><h3>Result</h3><div class="big">${esc(rs.sibr)}<span class="mute"> / 100 Sibr</span></div><dl>
+      <dt>Name</dt><dd>${esc(rs.name)}</dd>
+      <dt>Pain · value</dt><dd>${fmt(sc.pain)} · ${fmt(sc.value)}</dd><dt>Target · growth</dt><dd>${fmt(sc.target)} · ${fmt(sc.growth)}</dd>
+      <dt>Islamic</dt><dd>${esc(rs.islamic)}</dd><dt>Competition</dt><dd>${esc(rs.competition)}</dd>
+      <dt>Audiences scored</dt><dd>${esc(rs.audiences)}</dd><dt>Evidence links</dt><dd>${esc(rs.evidence)}</dd>
+      <dt>Top fit</dt><dd>${(rs.top || []).map(t => `<span class="chip">${esc(t.name)} ${Math.round(t.fit * 100)}%</span>`).join("")}</dd>
+      ${rs.summary ? `<dt>Summary</dt><dd>${esc(rs.summary)}</dd>` : ""}</dl></div>`);
+    if (rs.steps && rs.steps.length) {
+      const max = Math.max(...rs.steps.map(s => s.ms), 1);
+      boxes.push(`<div class="box"><h3>Behind the scenes · step timings</h3>${rs.steps.map(s => `<div class="step">
+        <span>${s.ok ? "✓" : "✕"} ${esc(s.step)}</span><div class="bar"><i class="${s.ok ? "" : "fail"}" style="width:${Math.max(2, s.ms / max * 100)}%"></i></div><span>${took(s.ms)}</span>
+        <div class="stepd">${esc(s.detail)}</div></div>`).join("")}
+        <div class="mute">Laya: ${esc(rs.laya_model || "?")} · LLM: ${esc(rs.llm || "?")}${rs.llm_error ? " · LLM error: " + esc(rs.llm_error) : ""}</div></div>`);
+    }
+  }
+  boxes.push(`<div class="box"><h3>Connection</h3><dl>
+    <dt>From</dt><dd>${esc(who(e))}${e.who && e.who !== e.name ? " (" + esc(e.who) + ")" : ""}</dd>
+    <dt>Route</dt><dd>${e.via === "tailscale" ? "Tailscale → tailscale serve → Sibr" : "directly on this PC"}</dd>
+    <dt>IP</dt><dd>${esc(e.ip)}</dd><dt>Device</dt><dd>${esc(device(d.ua) || "–")}</dd>
+    <dt>User agent</dt><dd class="mute">${esc(d.ua || "–")}</dd><dt>Opened from</dt><dd>${esc(d.origin || "–")}</dd>
+    ${d.query ? `<dt>Query</dt><dd>${esc(d.query.replace(/(admin|key)=[^&]*/g, "$1=…"))}</dd>` : ""}
+    <dt>Sent · received</dt><dd>${bytes(d.req_bytes)} · ${bytes(d.resp_bytes)}</dd>
+    <dt>Status</dt><dd>${e.status} ${esc(MEANING[e.status] || "")}</dd><dt>Took</dt><dd>${took(e.ms)}</dd>
+    ${d.error ? `<dt>Error</dt><dd class="s5">${esc(d.error)}</dd>` : ""}<dt>Log id</dt><dd>#${e.id}</dd></dl></div>`);
+  return `<div class="grid">${boxes.join("")}</div>`;
+}
+const fmt = v => typeof v === "number" ? Math.round(v * 100) + "%" : esc(v ?? "–");
 function keep(e) {
-  const f = $("#filter").value;
-  return !f || (f === "err" ? e.status >= 400 : f === "tailscale" ? e.via === "tailscale" : e.path === f);
+  const f = $("#filter").value, q = $("#q").value.trim().toLowerCase(), k = kind(e);
+  if (f === "api" && (k === "page" || k === "logs")) return false;
+  if (f === "eval" && !isEval(e)) return false;
+  if (f === "tailscale" && e.via !== "tailscale") return false;
+  if (f === "err" && e.status < 400) return false;
+  if (!q) return true;
+  const d = e.detail || {};
+  return [e.path, e.ip, e.who, e.name, e.note, d.ua, d.error, d.request && d.request.idea, d.result && d.result.name]
+    .some(x => String(x || "").toLowerCase().includes(q));
 }
+function shown() { return all.filter(keep).slice(-300).reverse(); }
 function render(freshFrom) {
-  const list = all.filter(keep).slice(-300).reverse();
-  $("#rows").innerHTML = list.map(e => row(e, e.id > freshFrom)).join("") || `<tr><td colspan="6" class="mute">No requests yet.</td></tr>`;
-  const ev = all.filter(e => e.path === "/evaluate" && e.status === 200);
+  $("#rows").innerHTML = shown().map(e => row(e, e.id > freshFrom)).join("") ||
+    `<tr><td colspan="6" class="mute">No matching requests yet.</td></tr>`;
+  const ev = all.filter(isEval), ok = ev.filter(e => e.status === 200);
   $("#nTotal").textContent = all.length;
-  $("#nEval").textContent = all.filter(e => e.path === "/evaluate").length;
-  $("#nTs").textContent = all.filter(e => e.via === "tailscale").length;
-  $("#nErr").textContent = all.filter(e => e.status >= 400).length;
-  $("#avg").textContent = ev.length ? (ev.reduce((a, e) => a + e.ms, 0) / ev.length / 1000).toFixed(1) + " s" : "–";
+  $("#nEval").textContent = ev.length;
+  $("#nOk").textContent = ok.length;
+  $("#nDenied").textContent = all.filter(e => e.status === 401).length;
+  $("#nErr").textContent = all.filter(e => e.status >= 400 && e.status !== 401 && e.status !== 404).length;
+  $("#nDev").textContent = new Set(all.map(e => e.via === "tailscale" ? (e.who || e.ip) : "pc:" + device((e.detail || {}).ua))).size;
+  $("#avg").textContent = ok.length ? took(ok.reduce((a, e) => a + e.ms, 0) / ok.length | 0) : "–";
+  $("#slow").textContent = ok.length ? took(Math.max(...ok.map(e => e.ms))) : "–";
+  const sc = ok.map(e => e.detail && e.detail.result && e.detail.result.sibr).filter(v => typeof v === "number");
+  $("#avgS").textContent = sc.length ? Math.round(sc.reduce((a, b) => a + b, 0) / sc.length) : "–";
 }
 async function poll() {
   if (!paused) {
@@ -105,17 +229,25 @@ async function poll() {
   }
   setTimeout(poll, 2000);
 }
-function showLogin(msg) {
-  $("#main").hidden = true; $("#login").hidden = false; $("#err").textContent = msg || "";
-}
+function showLogin(msg) { $("#main").hidden = true; $("#login").hidden = false; $("#err").textContent = msg || ""; }
 $("#save").onclick = () => {
   key = $("#key").value.trim();
   try { localStorage.setItem("sibrAdmin", key); } catch (e) {}
   $("#login").hidden = true; $("#main").hidden = false; since = 0; all = []; poll();
 };
 $("#key").addEventListener("keydown", e => { if (e.key === "Enter") $("#save").click(); });
+$("#rows").addEventListener("click", e => {
+  const tr = e.target.closest("tr.row"); if (!tr) return;
+  const id = +tr.dataset.id; open.has(id) ? open.delete(id) : open.add(id); render(Infinity);
+});
 $("#filter").onchange = () => render(Infinity);
+$("#q").oninput = () => render(Infinity);
 $("#pause").onclick = () => { paused = !paused; $("#pause").textContent = paused ? "Resume" : "Pause"; };
+$("#dl").onclick = () => {
+  const blob = new Blob([shown().map(e => JSON.stringify(e)).join("\n")], {type: "application/x-ndjson"});
+  const a = Object.assign(document.createElement("a"), {href: URL.createObjectURL(blob), download: "sibr-logs.jsonl"});
+  a.click(); URL.revokeObjectURL(a.href);
+};
 if (key) { $("#main").hidden = false; poll(); } else showLogin();
 </script>
 </body></html>
