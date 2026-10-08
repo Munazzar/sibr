@@ -1,5 +1,5 @@
 :root{
-  --bg:#07120f; --bg2:#0c1d18; --panel:rgba(14,32,27,.72); --line:rgba(201,169,97,.18);
+  --bg:#07120f; --bg2:#0c1d18; --panel:rgba(12,29,24,.94); --line:rgba(201,169,97,.18);
   --ink:#ecf1ec; --mute:#93a89f; --gold:#d6b46a; --gold2:#f1d89a;
   --good:#3fbf8f; --mid:#e0a43a; --bad:#e2584c; --info:#6fa8dc;
   --radius:16px;
@@ -26,15 +26,18 @@ h1 em{font-style:normal;background:linear-gradient(90deg,var(--gold),var(--gold2
 .lede{color:var(--mute);max-width:62ch;font-size:16.5px}
 .lede strong{color:var(--ink)}
 
-.ideaForm{display:flex;gap:10px;margin-top:26px;max-width:680px}
-.ideaBox{flex:1;min-width:0;display:grid;gap:4px}
-.ideaMeta{color:var(--mute);font-size:12px;padding-left:4px}
-.ideaForm textarea{resize:none;line-height:1.5;min-height:52px;max-height:320px;overflow:auto}
-.ideaForm input,.ideaForm textarea{flex:1;min-width:0;padding:15px 18px;border-radius:12px;border:1px solid var(--line);background:rgba(7,18,15,.8);color:var(--ink);font:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
-.ideaForm textarea:focus,.ideaForm input:focus{border-color:var(--gold);box-shadow:0 0 0 4px rgba(214,180,106,.12)}
-.ideaForm button{align-self:flex-start;height:52px;padding:0 20px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--gold),#b8924a);color:#1a1408;font:600 15px Inter;cursor:pointer;white-space:nowrap;transition:transform .15s,filter .2s}
-.ideaForm button:hover{filter:brightness(1.08);transform:translateY(-1px)}
-.ideaForm button:disabled{opacity:.7;cursor:progress;transform:none}
+.ideaForm{margin-top:26px;max-width:720px}
+.ideaBox{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:16px;background:#0a1915;transition:border-color .2s,box-shadow .2s}
+.ideaBox:focus-within{border-color:rgba(214,180,106,.6);box-shadow:0 0 0 4px rgba(214,180,106,.1)}
+.ideaForm textarea{display:block;width:100%;min-height:96px;max-height:340px;padding:16px 18px 6px;border:0;background:transparent;color:var(--ink);font:16px/1.6 Inter,system-ui,sans-serif;resize:none;outline:none;overflow-y:auto;field-sizing:content;scrollbar-width:thin;scrollbar-color:rgba(214,180,106,.3) transparent}
+.ideaForm textarea::placeholder{color:#6f8279}
+.ideaBar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 8px 8px 18px;border-top:1px solid rgba(201,169,97,.1)}
+.ideaMeta{display:flex;gap:12px;align-items:center;color:var(--mute);font-size:12px;font-variant-numeric:tabular-nums}
+.ideaMeta .kbd{opacity:.75}
+.ideaMeta.near{color:var(--mid)}
+.ideaForm button{height:42px;padding:0 18px;border:0;border-radius:10px;background:linear-gradient(135deg,var(--gold),#b8924a);color:#1a1408;font:600 14px Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap;transition:filter .2s}
+.ideaForm button:hover{filter:brightness(1.08)}
+.ideaForm button:disabled{opacity:.7;cursor:progress}
 .engine{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;margin-top:12px;max-width:680px}
 .engine>button{padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--mute);font:500 13px Inter;cursor:pointer}
 .engine>button small{opacity:.7;margin-left:4px}
@@ -50,7 +53,7 @@ h1 em{font-style:normal;background:linear-gradient(90deg,var(--gold),var(--gold2
 .engine .status.bad{color:var(--bad)}
 
 main{max-width:1080px;margin:0 auto;padding:0 20px 40px;display:grid;gap:22px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px;backdrop-filter:blur(10px);animation:rise .7s cubic-bezier(.2,.8,.2,1) both}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px;animation:rise .7s cubic-bezier(.2,.8,.2,1) both}
 .panel:nth-child(2){animation-delay:.1s}.panel:nth-child(3){animation-delay:.2s}
 @keyframes rise{from{opacity:0;transform:translateY(18px)}}
 .panelHead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
@@ -126,8 +129,7 @@ footer{text-align:center;color:var(--mute);font-size:13px;padding:24px 20px 40px
   .tableWrap{margin:0}
   .drawer{padding:24px 18px}
   .hero{padding-top:36px}
-  .ideaForm{flex-direction:column}
-  .ideaForm button{padding:14px}
+  .ideaMeta .kbd{display:none}
   .panel{padding:18px 14px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}tbody tr,.chip{opacity:1;transform:none}}
@@ -214,6 +216,5 @@ ul.ev small{display:block;color:var(--mute)}
   .summary{flex-direction:column;align-items:center;text-align:center}
   ol.trace li{grid-template-columns:1fr auto;}
   ol.trace li>span:last-child{grid-column:1/-1}
-  .ideaForm button{height:auto;align-self:stretch}
 }
 .processing[hidden]{display:none}

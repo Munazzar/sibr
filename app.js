@@ -305,7 +305,23 @@
   }
 
   const input = $("#ideaInput");
-  const grow = () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 320) + "px"; $("#ideaCount").textContent = `${input.value.length} / 5000`; };
+  // Resize at most once per frame, and not at all where CSS field-sizing does it.
+  const cssSizing = CSS.supports("field-sizing", "content");
+  const count = $("#ideaCount"), meta = count.parentElement;
+  let growQueued = false;
+  const grow = () => {
+    if (growQueued) return;
+    growQueued = true;
+    requestAnimationFrame(() => {
+      growQueued = false;
+      const n = input.value.length;
+      count.textContent = `${n} / 5000`;
+      meta.classList.toggle("near", n > 4500);
+      if (cssSizing) return;
+      input.style.height = "0";
+      input.style.height = Math.min(Math.max(input.scrollHeight, 96), 340) + "px";
+    });
+  };
   input.addEventListener("input", grow);
   input.addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("#ideaForm").requestSubmit(); } });
 
@@ -337,7 +353,9 @@
   const cv = $("#bg"), ctx = cv.getContext("2d");
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let W, H, DPR;
-  function size() { DPR = Math.min(2, devicePixelRatio || 1); W = cv.width = innerWidth * DPR; H = cv.height = innerHeight * DPR; }
+  // The lattice is faint and blurred by opacity, so 1x resolution at ~30 fps looks the same and
+  // leaves the main thread free for typing.
+  function size() { DPR = 1; W = cv.width = innerWidth * DPR; H = cv.height = innerHeight * DPR; }
   addEventListener("resize", size); size();
   function star(x, y, r, a, alpha) {
     ctx.strokeStyle = `rgba(214,180,106,${alpha})`;
@@ -350,7 +368,11 @@
       ctx.closePath(); ctx.stroke();
     }
   }
+  let last = -1e9;
   function frame(ts) {
+    if (!reduce) requestAnimationFrame(frame);
+    if (document.hidden || ts - last < 33) return;
+    last = ts;
     const t = ts / 1000;
     ctx.clearRect(0, 0, W, H);
     ctx.lineWidth = DPR;
@@ -362,7 +384,6 @@
         const pulse = .05 + .07 * (.5 + .5 * Math.sin(t * .8 + px * .004 + py * .003));
         star(px, py, 30 * DPR, t * .08 + (px + py) * .0005, pulse);
       }
-    if (!reduce) requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 })();

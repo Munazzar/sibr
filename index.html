@@ -26,10 +26,12 @@
   <p class="lede">Sibr scores each idea on pain, value, target, growth, Islamic alignment and competition — then breaks it down across geographies, age groups, communities and interests to show <strong>where it actually wins</strong>.</p>
   <form id="ideaForm" class="ideaForm" autocomplete="off">
     <div class="ideaBox">
-      <textarea id="ideaInput" rows="2" maxlength="5000" placeholder="Describe your idea in as much detail as you like: the problem, who it's for, how it works, how it makes money… e.g. halal investing app for students" aria-label="Business idea"></textarea>
-      <small class="ideaMeta"><span id="ideaCount">0 / 5000</span> · Ctrl+Enter to run</small>
+      <textarea id="ideaInput" rows="3" maxlength="5000" spellcheck="true" placeholder="Describe your idea in as much detail as you like: the problem, who it's for, how it works, how it makes money… e.g. halal investing app for students" aria-label="Business idea"></textarea>
+      <div class="ideaBar">
+        <small class="ideaMeta"><span id="ideaCount">0 / 5000</span><span class="kbd">Ctrl + Enter to run</span></small>
+        <button type="submit">Run lenses <span aria-hidden="true">→</span></button>
+      </div>
     </div>
-    <button type="submit">Run lenses <span aria-hidden="true">→</span></button>
   </form>
   <div class="engine" role="group" aria-label="Engine">
     <button type="button" data-engine="quick" aria-pressed="true">Quick <small>in your browser</small></button>
