@@ -109,6 +109,7 @@ def test_llm_none_provider_makes_no_calls():
 def test_parse_json():
     assert parse_json('Sure! {"a": 1} hope that helps') == {"a": 1}
     assert parse_json("nope") is None
+    assert parse_json('Here: ["a", "b"]') == ["a", "b"]
 
 
 def test_http_laya_posts_systemone():
@@ -234,6 +235,33 @@ def test_open_audience_uses_llm_suggestions_and_custom():
     assert r["lenses"]["Your audiences"][0]["who"] == "vets in Texas"
     assert r["meta"]["audience"] == {"open": True, "custom": 1, "suggested": 2}
     assert any(s["step"] == "Audience suggestions" and s["ok"] for s in r["meta"]["steps"])
+
+
+def test_audience_list_accepts_loose_shapes():
+    from sibr_api.pipeline import audience_list
+    assert audience_list(["Dentists in Texas", "dentists in texas", "", 3]) == [
+        {"name": "Dentists in Texas", "who": "Dentists in Texas"}]
+    assert audience_list({"customers": [{"description": "small gyms"}]}) == [{"name": "small gyms", "who": "small gyms"}]
+    assert audience_list({"audiences": [{"name": "Vets", "who": "vet clinics"}]})[0]["name"] == "Vets"
+    assert audience_list(None) == [] and audience_list({"audiences": "x"}) == []
+
+
+def test_open_audience_retries_with_a_simpler_ask():
+    asks = []
+
+    def llm(request):
+        sys = json.loads(request.content)["messages"][0]["content"]
+        if "go-to-market" in sys:
+            asks.append("full")
+            return chat_reply("I think dentists and gyms would like this.")
+        if "groups of customers" in sys:
+            asks.append("simple")
+            return chat_reply('["dentists in Texas", "small gym owners"]')
+        return good_llm(request)
+
+    r = Pipeline(FakeLaya(), llm_with(llm)).evaluate("booking software", open_audience=True)
+    assert asks == ["full", "simple"]
+    assert [c["who"] for c in r["lenses"]["Suggested by Sibr"]] == ["dentists in Texas", "small gym owners"]
 
 
 def test_open_audience_falls_back_without_llm():

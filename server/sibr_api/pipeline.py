@@ -98,6 +98,26 @@ def questions_for(segments: Optional[List[str]]) -> Dict[str, Any]:
     return {k: q for k, q in QUESTIONS.items() if not k.startswith("seg_") or k[4:] in keep}
 
 
+def audience_list(data: Any) -> List[Dict[str, str]]:
+    """Audiences from an LLM reply: {"audiences": [...]}, any other list in the object, or a bare
+    list; each item a string or an object with who / description / name."""
+    items = data if isinstance(data, list) else []
+    if isinstance(data, dict):
+        items = data.get("audiences") or next((v for v in data.values() if isinstance(v, list)), [])
+    out, seen = [], set()
+    for a in items if isinstance(items, list) else []:
+        if isinstance(a, dict):
+            who = next((a[k] for k in ("who", "description", "audience", "name") if isinstance(a.get(k), str) and a[k].strip()), "")
+            name = a.get("name") if isinstance(a.get("name"), str) and a["name"].strip() else who
+        else:
+            who = name = a if isinstance(a, str) else ""
+        who = " ".join(who.split())[:160]
+        if len(who) >= 3 and who.lower() not in seen:
+            seen.add(who.lower())
+            out.append({"name": " ".join(name.split())[:40], "who": who})
+    return out
+
+
 def predict_batched(laya, state: Dict[str, Any], questions: Dict[str, Any]) -> Dict[str, Any]:
     """One call when the questions fit, else the core questions plus as many segments as fit,
     then the remaining segments in further calls on the same state. Answers are merged."""
@@ -133,18 +153,23 @@ class Pipeline:
         return card
 
     # Open mode: no audience picked, so the LLM proposes likely customers for Laya to score.
+    # Small local models often miss the full shape, so any list of names or descriptions is
+    # accepted, and a second, simpler ask follows an unusable reply.
     def suggest_audiences(self, text: str, card: Dict[str, str]) -> List[Dict[str, str]]:
+        summary = "; ".join(f"{k}: {v}" for k, v in card.items() if v)
         data = self.llm.chat_json(
             "You are a go-to-market analyst. List the 10 most likely distinct customer audiences for this business "
             "idea, from most to least promising, across any demographic, profession, business type, place or "
             "interest. Customers do not need to share the founder's faith. Keys: audiences (list of objects with "
             "name: at most four words, and who: a plain description of the people or organisations).",
-            f"Idea: {text}\nCard: {card}", max_tokens=700)
-        out = []
-        for a in (data or {}).get("audiences", []) if isinstance(data, dict) else []:
-            if isinstance(a, dict) and isinstance(a.get("who"), str) and a["who"].strip():
-                who = a["who"].strip()[:160]
-                out.append({"name": str(a.get("name") or who).strip()[:40], "who": who})
+            f"Idea: {text}\nCard: {summary}", max_tokens=700)
+        out = audience_list(data)
+        if not out:
+            data = self.llm.chat_json(
+                'Name 8 groups of customers who would pay for this business idea. Reply exactly like '
+                '{"audiences": ["dentists in Texas", "busy working parents"]}.',
+                f"Idea: {text}", max_tokens=300)
+            out = audience_list(data)
         return out[:MAX_EXTRA_AUDIENCES]
 
     # 3. Persona pass
