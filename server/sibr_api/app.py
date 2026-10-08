@@ -1,5 +1,6 @@
 """HTTP API. Run with: uvicorn sibr_api.app:app --port 8787"""
 import hmac
+import inspect
 import logging
 from pathlib import Path
 from typing import Optional
@@ -32,8 +33,13 @@ def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:
     pipeline = pipeline or Pipeline(make_laya(settings), LLM(settings), settings.laya_min_confidence,
                                     Evidence(settings.evidence, settings.evidence_results))
     app = FastAPI(title="Sibr model service", version=__version__)
-    app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
-                       allow_methods=["GET", "POST"], allow_headers=["content-type", "x-sibr-key"])
+    cors = dict(allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
+                allow_methods=["GET", "POST"], allow_headers=["content-type", "x-sibr-key"])
+    # The public site (GitHub Pages) calling a Tailscale 100.x address is a private-network
+    # request; Chrome needs this preflight header for it.
+    if "allow_private_network" in inspect.signature(CORSMiddleware.__init__).parameters:
+        cors["allow_private_network"] = True
+    app.add_middleware(CORSMiddleware, **cors)
 
     @app.get("/health")
     def health():

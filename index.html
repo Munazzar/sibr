@@ -28,6 +28,21 @@
     <input id="ideaInput" type="text" placeholder="Describe an idea… e.g. halal investing app for students" maxlength="140" aria-label="Business idea">
     <button type="submit">Run lenses <span aria-hidden="true">→</span></button>
   </form>
+  <div class="engine" role="group" aria-label="Engine">
+    <button type="button" data-engine="quick" aria-pressed="true">Quick <small>in your browser</small></button>
+    <button type="button" data-engine="laya" aria-pressed="false">Laya <small>on my PC</small></button>
+    <details id="layaSettings">
+      <summary>Laya settings</summary>
+      <form id="layaForm" autocomplete="off">
+        <label id="layaApiRow">Your PC's Tailscale address
+          <input id="layaApi" type="url" placeholder="https://your-pc.your-tailnet.ts.net"></label>
+        <label>Access key
+          <input id="layaKey" type="password" placeholder="SIBR_API_KEY from server\.env"></label>
+        <button type="submit">Save and test</button>
+        <p class="status" id="layaStatus">Saved only in this browser. Laya works when this device is on your Tailscale network.</p>
+      </form>
+    </details>
+  </div>
 </header>
 
 <main>

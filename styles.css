@@ -31,6 +31,20 @@ h1 em{font-style:normal;background:linear-gradient(90deg,var(--gold),var(--gold2
 .ideaForm input:focus{border-color:var(--gold);box-shadow:0 0 0 4px rgba(214,180,106,.12)}
 .ideaForm button{padding:0 20px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--gold),#b8924a);color:#1a1408;font:600 15px Inter;cursor:pointer;white-space:nowrap;transition:transform .15s,filter .2s}
 .ideaForm button:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.ideaForm button:disabled{opacity:.7;cursor:progress;transform:none}
+.engine{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;margin-top:12px;max-width:680px}
+.engine>button{padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--mute);font:500 13px Inter;cursor:pointer}
+.engine>button small{opacity:.7;margin-left:4px}
+.engine>button[aria-pressed="true"]{border-color:var(--gold);color:var(--ink);background:rgba(214,180,106,.12)}
+.engine details{flex-basis:100%;color:var(--mute);font-size:13px}
+.engine summary{cursor:pointer;width:max-content}
+.engine form{display:grid;gap:10px;margin-top:10px;padding:14px;border:1px solid var(--line);border-radius:12px;background:rgba(7,18,15,.8)}
+.engine label{display:grid;gap:4px}
+.engine input{padding:10px 12px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;min-width:0}
+.engine form button{justify-self:start;padding:9px 14px;border:0;border-radius:9px;background:var(--gold);color:#1a1408;font:600 13px Inter;cursor:pointer}
+.engine .status{margin:0}
+.engine .status.ok{color:var(--good)}
+.engine .status.bad{color:var(--bad)}
 
 main{max-width:1080px;margin:0 auto;padding:0 20px 40px;display:grid;gap:22px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px;backdrop-filter:blur(10px);animation:rise .7s cubic-bezier(.2,.8,.2,1) both}

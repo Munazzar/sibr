@@ -3,7 +3,6 @@
   const $ = s => document.querySelector(s);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const MARK = { g: "✓", m: "~", b: "✕" };
-  const API = (new URLSearchParams(location.search).get("api") || window.SIBR_API || "").replace(/\/$/, "");
   const color = v => v >= .7 ? "var(--good)" : v >= .45 ? "var(--mid)" : "var(--bad)";
 
   let results = SEED.map(i => evaluate({ ...i }));
@@ -63,29 +62,59 @@
       <ul>${s.why.map(w => `<li>${esc(w)}</li>`).join("")}</ul>
       ${r.meta && r.meta.engine === "laya"
         ? `<p class="note">Laya verdict${s.confidence != null ? `, confidence ${Math.round(s.confidence * 100)}%` : ""}.${s.escalate ? " <b>Low confidence: needs a human check.</b>" : ""} ${r.evidence && r.evidence.length ? `Backed by ${r.evidence.length} web results (listed under the lens map).` : "No web evidence was found for this run."}</p>`
-        : `<p class="note">Heuristic estimate${r.fallback ? ` (model service unreachable: ${esc(r.fallback)})` : ""}. With the model service connected this cell is a calibrated Laya verdict.</p>`}`;
+        : `<p class="note">Heuristic estimate${r.fallback ? ` (Laya ${esc(r.fallback)})` : ""}. Choose “Laya on my PC” for a calibrated Laya verdict.</p>`}`;
     $("#drawer").classList.add("open");
     $("#drawer").setAttribute("aria-hidden", "false");
   }
   $("#closeDrawer").addEventListener("click", () => { $("#drawer").classList.remove("open"); $("#drawer").setAttribute("aria-hidden", "true"); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") $("#closeDrawer").click(); });
 
-  // Access key for a service started with SIBR_API_KEY: from ?key= once, then remembered on this device.
-  const store = { get: () => { try { return localStorage.getItem("sibrKey") || ""; } catch { return ""; } },
-                  set: v => { try { localStorage.setItem("sibrKey", v); } catch {} } };
-  const urlKey = new URLSearchParams(location.search).get("key");
-  if (urlKey) {
-    store.set(urlKey);
-    const u = new URL(location.href); u.searchParams.delete("key"); history.replaceState(null, "", u);
+  // Engine choice. "quick" runs engine.js in the browser and works anywhere. "laya" calls the
+  // model service on the owner's PC, reachable only over their Tailscale network.
+  const ls = {
+    get: k => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+    set: (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} }
+  };
+  const params = new URLSearchParams(location.search);
+  for (const [p, k] of [["api", "sibrApi"], ["key", "sibrKey"]]) if (params.get(p)) ls.set(k, params.get(p).trim());
+  if (params.has("key")) { const u = new URL(location.href); u.searchParams.delete("key"); history.replaceState(null, "", u); }
+  // Served by the service itself, config.js points at this same origin.
+  const servedApi = (window.SIBR_API || "").replace(/\/$/, "");
+  const apiUrl = () => (servedApi || ls.get("sibrApi")).replace(/\/$/, "");
+  let engine = ls.get("sibrEngine") || (servedApi ? "laya" : "quick");
+
+  function renderEngine() {
+    document.querySelectorAll(".engine [data-engine]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.engine === engine)));
+    $("#ideaForm button").innerHTML = engine === "laya" ? 'Run with Laya <span aria-hidden="true">→</span>' : 'Run lenses <span aria-hidden="true">→</span>';
+    $("#layaApi").value = ls.get("sibrApi"); $("#layaKey").value = ls.get("sibrKey");
+    $("#layaApiRow").hidden = !!servedApi;
   }
+  document.querySelectorAll(".engine [data-engine]").forEach(b => b.addEventListener("click", () => {
+    engine = b.dataset.engine; ls.set("sibrEngine", engine); renderEngine();
+    if (engine === "laya" && !apiUrl()) $("#layaSettings").open = true;
+  }));
+  function status(msg, ok) { const el = $("#layaStatus"); el.textContent = msg; el.className = "status " + (ok ? "ok" : ok === false ? "bad" : ""); }
+  $("#layaForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    ls.set("sibrApi", $("#layaApi").value.trim()); ls.set("sibrKey", $("#layaKey").value.trim());
+    if (!apiUrl()) return status("Add your PC's Tailscale address first.", false);
+    status("Checking…");
+    try {
+      const h = await (await fetch(apiUrl() + "/health")).json();
+      status(`Connected: Laya ${h.laya.model || ""}, LLM ${h.llm.model || "off"}.`, true);
+    } catch { status("Can't reach it. Is this device on Tailscale and is Sibr running on your PC?", false); }
+  });
 
   async function remote(text, retry = true) {
+    if (!apiUrl()) throw new Error("no Laya address set");
     const headers = { "content-type": "application/json" };
-    if (store.get()) headers["x-sibr-key"] = store.get();
-    const res = await fetch(API + "/evaluate", { method: "POST", headers, body: JSON.stringify({ idea: text }) });
+    if (ls.get("sibrKey")) headers["x-sibr-key"] = ls.get("sibrKey");
+    let res;
+    try { res = await fetch(apiUrl() + "/evaluate", { method: "POST", headers, body: JSON.stringify({ idea: text }) }); }
+    catch { throw new Error("can't reach your PC. Connect this device to Tailscale and check Sibr is running"); }
     if (res.status === 401 && retry) {
       const k = prompt("Sibr access key");
-      if (k) { store.set(k.trim()); return remote(text, false); }
+      if (k) { ls.set("sibrKey", k.trim()); renderEngine(); return remote(text, false); }
     }
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "HTTP " + res.status);
     return res.json();
@@ -97,18 +126,20 @@
     const btn = $("#ideaForm button");
     if (!v || btn.disabled) return;
     let r;
-    if (API) {
-      btn.disabled = true; btn.dataset.label = btn.innerHTML; btn.textContent = "Running Laya…";
+    if (engine === "laya") {
+      btn.disabled = true; btn.textContent = "Running Laya…";
       try { r = await remote(v); }
       catch (err) { r = evaluate(fromText(v)); r.fallback = err.message; }
-      finally { btn.disabled = false; btn.innerHTML = btn.dataset.label; }
+      finally { btn.disabled = false; renderEngine(); }
     } else r = evaluate(fromText(v));
     results.unshift(r);
     active = 0;
     $("#ideaInput").value = "";
     renderMatrix(); renderLenses();
+    if (r.fallback) $("#lensIdea").textContent = `Quick estimate: Laya ${r.fallback}.`;
   });
 
+  renderEngine();
   renderMatrix(); renderLenses();
 
   // Animated background: slowly rotating square lattice

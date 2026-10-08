@@ -125,3 +125,13 @@ def test_access_key_and_site_serving():
     assert c.get("/app.js").status_code == 200
     for blocked in ("/README.md", "/.env", "/server/.env", "/..%2Fserver%2F.env"):
         assert c.get(blocked).status_code == 404, blocked
+
+
+def test_public_site_preflight_allows_private_network():
+    c = TestClient(create_app(Pipeline(FakeLaya(), llm_with(good_llm)), Settings(llm_provider="ollama")))
+    r = c.options("/evaluate", headers={"origin": "https://munazzar.github.io", "access-control-request-method": "POST",
+                                        "access-control-request-headers": "content-type,x-sibr-key",
+                                        "access-control-request-private-network": "true"})
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] == "https://munazzar.github.io"
+    assert r.headers.get("access-control-allow-private-network") == "true"
