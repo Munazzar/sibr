@@ -277,3 +277,19 @@ def test_api_accepts_open_and_custom():
     client = TestClient(create_app(Pipeline(laya, llm_with(open_llm)), Settings(serve_site="0")))
     r = client.post("/evaluate", json={"idea": "booking software", "open_audience": True, "custom": ["vets"]})
     assert r.status_code == 200 and "Suggested by Sibr" in r.json()["lenses"]
+
+
+def test_training_status_needs_admin_key(tmp_path, monkeypatch):
+    from sibr_api import app as app_mod
+    runs = tmp_path / "data" / "runs"
+    runs.mkdir(parents=True)
+    (runs / "chain.log").write_text("2026-10-08 15:27:21 START wait for dataset pid 1\n")
+    (runs / "v1-finetune.log").write_text("epoch 1\nepoch 2\n")
+    (tmp_path / "data" / "labels.jsonl").write_text('{"idea": "a"}\n{"idea": "b"}\n')
+    (tmp_path / "checkpoints" / "sibr-laya-v1").mkdir(parents=True)
+    monkeypatch.setattr(app_mod, "TRAINING", tmp_path)
+    c = TestClient(create_app(Pipeline(FakeLaya(), llm_with(good_llm)), Settings(llm_provider="ollama", admin_key="adm1n")))
+    assert c.get("/training.json").status_code == 401
+    t = c.get("/training.json", headers={"x-sibr-admin": "adm1n"}).json()
+    assert t["datasets"]["labels.jsonl"]["ideas"] == 2 and t["checkpoints"] == ["sibr-laya-v1"]
+    assert t["stage_log"]["tail"] == ["epoch 1", "epoch 2"] and "START" in t["chain"][0]

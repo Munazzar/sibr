@@ -29,6 +29,30 @@ SITE = Path(__file__).resolve().parents[2]
 # Only these files are served, so nothing else in the repo (like server/.env) is reachable.
 SITE_FILES = {"index.html", "app.js", "engine.js", "segments.js", "styles.css"}
 LOGS_PAGE = Path(__file__).with_name("logs.html")
+TRAINING = Path(__file__).resolve().parents[1] / "training"
+
+
+def _tail(path: Path, n: int) -> list:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace").splitlines()[-n:]
+    except OSError:
+        return []
+
+
+def training_status() -> dict:
+    """What the overnight training chain is doing, read from the files it writes."""
+    data, runs = TRAINING / "data", TRAINING / "data" / "runs"
+    chain = _tail(runs / "chain.log", 40)
+    stage_logs = sorted(runs.glob("*.log"), key=lambda p: p.stat().st_mtime) if runs.exists() else []
+    current = next((p for p in reversed(stage_logs) if p.name != "chain.log"), None)
+    datasets = {p.name: {"ideas": sum(1 for line in open(p, encoding="utf-8") if line.strip()),
+                         "updated": datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds")}
+                for p in sorted(data.glob("labels*.jsonl"))} if data.exists() else {}
+    ckpt_dir = TRAINING / "checkpoints"
+    ckpts = sorted(p.name for p in ckpt_dir.iterdir() if p.is_dir()) if ckpt_dir.exists() else []
+    return {"chain": chain, "datasets": datasets, "checkpoints": ckpts,
+            "stage_log": {"name": current.name, "tail": _tail(current, 8)} if current else None,
+            "gold": (data / "gold.csv").exists()}
 
 
 def _kind(method: str, path: str) -> str:
@@ -90,7 +114,7 @@ def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:
 
     @app.middleware("http")
     async def record(request: Request, call_next):
-        if request.url.path == "/logs.json":  # the log page polling itself is noise
+        if request.url.path in ("/logs.json", "/training.json"):  # the log page polling itself is noise
             return await call_next(request)
         t, status = time.perf_counter(), 500
         resp = None
@@ -138,6 +162,12 @@ def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:
         if not admin_ok(x_sibr_admin):
             raise HTTPException(401, "Missing or wrong admin key (SIBR_ADMIN_KEY in server/.env)")
         return {"entries": [e for e in recent if e["id"] > since]}
+
+    @app.get("/training.json")
+    def training_json(x_sibr_admin: Optional[str] = Header(default=None)):
+        if not admin_ok(x_sibr_admin):
+            raise HTTPException(401, "Missing or wrong admin key (SIBR_ADMIN_KEY in server/.env)")
+        return training_status()
 
     @app.get("/health")
     def health():

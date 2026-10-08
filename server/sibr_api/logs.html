@@ -44,6 +44,14 @@ dt{color:var(--mute)}dd{margin:0;word-break:break-word}
 .stepd{grid-column:1/-1;color:var(--mute);font-size:12px;margin:-2px 0 4px}
 .chip{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:1px 8px;margin:2px 4px 2px 0;font-size:12px}
 .big{font-size:26px;font-weight:700;color:var(--gold)}
+#training{margin:0 0 12px}
+#training summary{cursor:pointer;font-weight:600}
+.stage{display:grid;grid-template-columns:22px 1fr auto;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line)}
+.stage:last-child{border-bottom:0}
+.st-done{color:var(--ok)}.st-run{color:var(--gold)}.st-stop{color:var(--bad)}.st-wait{color:var(--mute)}
+.prog{height:8px;border-radius:4px;background:var(--line);overflow:hidden;margin:4px 0 8px}
+.prog i{display:block;height:100%;background:var(--gold)}
+pre.tail{background:var(--bg);border-radius:8px;padding:8px;margin:6px 0 0;white-space:pre-wrap;font-size:12px;max-height:160px;overflow:auto}
 #login{max-width:420px;margin:40px auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
 #login input{width:100%;margin:8px 0}
 </style></head>
@@ -82,6 +90,14 @@ dt{color:var(--mute)}dd{margin:0;word-break:break-word}
     <div class="stat"><b id="slow">–</b><span class="mute">slowest evaluation</span></div>
     <div class="stat"><b id="avgS">–</b><span class="mute">avg Sibr score</span></div>
   </div>
+  <details id="training" class="box" open>
+    <summary>Training Laya (runs on this PC overnight, no cloud, no cost) · <span id="trSum" class="mute">loading…</span></summary>
+    <div class="grid" style="margin-top:10px">
+      <div><h3>Steps</h3><div id="trSteps"></div></div>
+      <div><h3>Progress</h3><div id="trData"></div><div class="mute" id="trCk"></div></div>
+      <div><h3>Latest output</h3><div class="mute" id="trLogName"></div><pre class="tail" id="trTail">–</pre></div>
+    </div>
+  </details>
   <div class="wrap"><table>
     <thead><tr><th>Time</th><th>From</th><th>Request</th><th>Result</th><th>Took</th><th>Details</th></tr></thead>
     <tbody id="rows"></tbody>
@@ -233,7 +249,7 @@ function showLogin(msg) { $("#main").hidden = true; $("#login").hidden = false; 
 $("#save").onclick = () => {
   key = $("#key").value.trim();
   try { localStorage.setItem("sibrAdmin", key); } catch (e) {}
-  $("#login").hidden = true; $("#main").hidden = false; since = 0; all = []; poll();
+  $("#login").hidden = true; $("#main").hidden = false; since = 0; all = []; poll(); training();
 };
 $("#key").addEventListener("keydown", e => { if (e.key === "Enter") $("#save").click(); });
 $("#rows").addEventListener("click", e => {
@@ -248,6 +264,36 @@ $("#dl").onclick = () => {
   const a = Object.assign(document.createElement("a"), {href: URL.createObjectURL(blob), download: "sibr-logs.jsonl"});
   a.click(); URL.revokeObjectURL(a.href);
 };
-if (key) { $("#main").hidden = false; poll(); } else showLogin();
+const STAGES = [
+  ["dataset", "Grade 1,000 sample ideas (llama3.2:3b)", "labels.jsonl", 1000],
+  ["v1 fine-tune", "Train Laya v1 on them"],
+  ["qwen3:14b re-grade", "Re-grade the same ideas with qwen3:14b (stronger)", "labels-qwen3.jsonl", 1000],
+  ["grow to 3000", "Grow to 3,000 ideas with qwen3:14b", "labels-qwen3.jsonl", 3000],
+  ["v2 fine-tune", "Train Laya v2 on the 3,000"]];
+async function training() {
+  try {
+    const r = await fetch("/training.json", {headers: {"X-Sibr-Admin": key}});
+    if (r.ok) {
+      const t = await r.json(), log = t.chain.join("\n"), stopped = /STOPPED|stopped early/.test(log);
+      let current = "";
+      $("#trSteps").innerHTML = STAGES.map(([id, label]) => {
+        const done = log.includes("DONE  " + id), started = log.includes("START " + id) || (id === "dataset" && log.includes("START wait"));
+        const st = done ? "done" : started ? (stopped ? "stop" : "run") : "wait";
+        if (st === "run" || st === "stop") current = label;
+        return `<div class="stage"><span class="st-${st}">${{done: "✓", run: "●", stop: "✕", wait: "○"}[st]}</span><span>${esc(label)}</span><span class="mute st-${st}">${{done: "done", run: "running", stop: "stopped", wait: "waiting"}[st]}</span></div>`;
+      }).join("");
+      $("#trSum").textContent = log.includes("CHAIN COMPLETE") ? "all steps done" : stopped ? "stopped: see latest output" : current ? "now: " + current : "not started";
+      $("#trData").innerHTML = Object.entries(t.datasets).map(([name, d]) => {
+        const goal = name === "labels.jsonl" ? 1000 : 3000;
+        return `<div>${esc(name === "labels.jsonl" ? "llama3.2:3b grades" : "qwen3:14b grades")}: <b>${d.ideas}</b> / ${goal} ideas <span class="mute">· updated ${ago(d.updated)}</span></div><div class="prog"><i style="width:${Math.min(100, d.ideas / goal * 100)}%"></i></div>`;
+      }).join("") || "No dataset yet.";
+      $("#trCk").textContent = "Trained versions: " + (t.checkpoints.length ? t.checkpoints.join(", ") : "none yet") + (t.gold ? " · gold set file present" : " · gold set not built yet");
+      $("#trLogName").textContent = t.stage_log ? t.stage_log.name : "";
+      $("#trTail").textContent = t.stage_log ? t.stage_log.tail.join("\n") || "–" : t.chain.slice(-6).join("\n") || "–";
+    }
+  } catch (e) {}
+  setTimeout(training, 10000);
+}
+if (key) { $("#main").hidden = false; poll(); training(); } else showLogin();
 </script>
 </body></html>
