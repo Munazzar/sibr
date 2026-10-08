@@ -11,22 +11,28 @@
 - A lens map covering 21 segments (geography × age × community × interest). Click any cell to see why it scored the way it did.
 - Islamic-alignment flags (riba, gambling, speculative instruments, haram categories, content/ads). These are **flags for scholarly review, not rulings**.
 
-The engine in `engine.js` is a transparent, deterministic **heuristic**. It exists so the UI is usable now. Treat its scores as directional, not as research.
+## Engine
 
-## Planned engine
+Ideas typed into the site go to the **model service** in [`server/`](server/README.md) when one is configured, and to the in-browser heuristic in `engine.js` otherwise (or when the service is unreachable).
 
-1. **Idea card**: problem, user, solution, revenue, delivery.
-2. **Lens grid**: segment cells.
-3. **Evidence pull**: competitors, reviews, forums, trends.
-4. **LLM persona pass**: a short analysis per cell.
-5. **Verdict heads**: fine-tuned [Laya](https://huggingface.co/convaiinnovations/laya) classifiers that return typed, calibrated verdicts, with low-confidence cells escalated.
+| Step | Status |
+|---|---|
+| 1. **Idea card**: problem, user, solution, revenue, delivery | Built: a swappable LLM, free local Ollama by default |
+| 2. **Lens grid**: segment cells | Built: 21 cells, shared with `engine.js` |
+| 3. **Evidence pull**: competitors, reviews, forums, trends | Built: free DuckDuckGo search, three queries per idea |
+| 4. **LLM persona pass**: a short analysis per cell | Built: one line per cell plus a verdict |
+| 5. **Verdict heads**: [Laya](https://github.com/NandhaKishorM/laya) typed, calibrated verdicts, low-confidence cells escalated | Built. Runs the stock checkpoint until you fine-tune one with `server/training/` |
 
-To wire it up, replace `Sibr.evaluate` with a call to the model service. The return shape is documented in the code.
+Point the site at a running service with `window.SIBR_API` in `config.js`, or add `?api=https://your-service` to the page URL.
+
+The heuristic in `engine.js` is transparent and deterministic. Treat its scores as directional, not as research.
 
 ## Run locally
 
-This is a static site with no build step. Open `index.html` directly, or serve the folder:
+The site is static with no build step. Open `index.html` directly, or serve the folder:
 
 ```
-python3 -m http.server
+python3 -m http.server 8080
 ```
+
+On Windows, `scripts\setup.ps1` then `scripts\start.ps1` runs everything locally for free at `http://localhost:8787/`, and `scripts\tailscale.ps1` shares it privately with your other devices. Otherwise see [`server/README.md`](server/README.md).

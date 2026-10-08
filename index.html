@@ -28,6 +28,21 @@
     <input id="ideaInput" type="text" placeholder="Describe an idea… e.g. halal investing app for students" maxlength="140" aria-label="Business idea">
     <button type="submit">Run lenses <span aria-hidden="true">→</span></button>
   </form>
+  <div class="engine" role="group" aria-label="Engine">
+    <button type="button" data-engine="quick" aria-pressed="true">Quick <small>in your browser</small></button>
+    <button type="button" data-engine="laya" aria-pressed="false">Laya <small>on my PC</small></button>
+    <details id="layaSettings">
+      <summary>Laya settings</summary>
+      <form id="layaForm" autocomplete="off">
+        <label id="layaApiRow">Your PC's Tailscale address
+          <input id="layaApi" type="url" placeholder="https://your-pc.your-tailnet.ts.net"></label>
+        <label>Access key
+          <input id="layaKey" type="password" placeholder="SIBR_API_KEY from server\.env"></label>
+        <button type="submit">Save and test</button>
+        <p class="status" id="layaStatus">Saved only in this browser. Laya works when this device is on your Tailscale network.</p>
+      </form>
+    </details>
+  </div>
 </header>
 
 <main>
@@ -64,7 +79,7 @@
       <li><b>Persona pass</b><span>LLM writes a short analysis per cell.</span></li>
       <li><b>Verdict heads</b><span>Fine-tuned Laya classifiers return typed, calibrated verdicts.</span></li>
     </ol>
-    <p class="note">This release runs a transparent <b>heuristic engine in the browser</b> so the UI is usable today. Scores are directional, not research. Islamic-alignment output is a <b>flag for scholarly review</b>, never a ruling.</p>
+    <p class="note">With the model service connected, ideas are scored by an LLM idea card plus <b>Laya</b> verdicts. Without it, a transparent <b>heuristic engine runs in the browser</b>. Scores are directional, not research. Islamic-alignment output is a <b>flag for scholarly review</b>, never a ruling.</p>
   </section>
 </main>
 
@@ -74,6 +89,7 @@
 </aside>
 
 <footer>Sibr · صبر · patience in building · <a href="https://munazzar.github.io/plotline/#/bench">workbench</a> · <a href="https://github.com/Munazzar/sibr">source</a></footer>
+<script src="config.js"></script>
 <script src="engine.js"></script>
 <script src="app.js"></script>
 </body>
