@@ -3,7 +3,7 @@ import hmac
 import inspect
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +26,8 @@ SITE_FILES = {"index.html", "app.js", "engine.js", "styles.css"}
 
 class EvaluateIn(BaseModel):
     idea: str = Field(min_length=3, max_length=5000)
+    # Audience segment ids to score (see segments.py). Empty or missing means all of them.
+    segments: Optional[List[str]] = Field(default=None, max_length=64)
 
 
 def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:
@@ -51,7 +53,7 @@ def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:
         if settings.api_key and not hmac.compare_digest(x_sibr_key or "", settings.api_key):
             raise HTTPException(401, "Missing or wrong access key")
         try:
-            return pipeline.evaluate(body.idea)
+            return pipeline.evaluate(body.idea, body.segments)
         except LayaUnavailable as e:
             raise HTTPException(503, f"Laya is unavailable: {e}")
 

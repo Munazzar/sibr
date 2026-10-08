@@ -148,3 +148,22 @@ def test_long_idea_is_trimmed_for_laya_and_steps_are_reported():
     assert "trimmed" in r["meta"]["steps"][2]["detail"]
     c = TestClient(create_app(Pipeline(FakeLaya(), llm_with(good_llm)), Settings(llm_provider="ollama")))
     assert c.post("/evaluate", json={"idea": "x" * 4000}).status_code == 200
+
+
+def test_segment_filter_narrows_questions_and_lenses():
+    laya = FakeLaya()
+    r = Pipeline(laya, llm_with(good_llm)).evaluate("halal investing app", ["fin", "dia", "nope"])
+    asked = [k for k in laya.calls[0][1] if k.startswith("seg_")]
+    assert asked == ["seg_dia", "seg_fin"]
+    assert set(r["lenses"]) == {"Community", "Interest"}
+    assert [c["id"] for c in r["top"]] == ["dia", "fin"] or [c["id"] for c in r["top"]] == ["fin", "dia"]
+    assert r["meta"]["segments"] == ["dia", "fin"]
+
+
+def test_api_passes_segments():
+    laya = FakeLaya()
+    client = TestClient(create_app(Pipeline(laya, llm_with(good_llm)), Settings(serve_site="0")))
+    assert client.post("/evaluate", json={"idea": "halal investing app", "segments": ["us"]}).status_code == 200
+    assert [k for k in laya.calls[0][1] if k.startswith("seg_")] == ["seg_us"]
+    client.post("/evaluate", json={"idea": "halal investing app"})
+    assert sum(k.startswith("seg_") for k in laya.calls[1][1]) == 21

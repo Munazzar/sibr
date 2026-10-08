@@ -22,8 +22,8 @@
 
 <header class="hero">
   <div class="top"><div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>SIBR<span class="sub">matrix</span></div><a class="cta" href="https://munazzar.github.io/plotline/#/bench">Open the Workbench <span aria-hidden="true">→</span></a></div>
-  <h1>Test an idea against <em>every lens</em>, not just your own.</h1>
-  <p class="lede">Sibr scores each idea on pain, value, target, growth, Islamic alignment and competition — then breaks it down across geographies, age groups, communities and interests to show <strong>where it actually wins</strong>.</p>
+  <h1>Is your idea <em>worth your time</em>?</h1>
+  <p class="lede">Share a business idea and Sibr checks it on six parameters: <strong>pain, value, target audience, growth, Islamic alignment and competition</strong>. Then it shows which audiences across geographies, ages, communities and interests it actually wins with, before you spend months building it.</p>
   <form id="ideaForm" class="ideaForm" autocomplete="off">
     <div class="ideaBox">
       <textarea id="ideaInput" rows="3" maxlength="5000" spellcheck="true" placeholder="Describe your idea in as much detail as you like: the problem, who it's for, how it works, how it makes money… e.g. halal investing app for students" aria-label="Business idea"></textarea>
@@ -33,6 +33,13 @@
       </div>
     </div>
   </form>
+  <details class="audience" id="audience">
+    <summary><span>Audience</span> <b id="audSum">All 21 segments</b> <small>Choose who to test before you run</small></summary>
+    <div class="audBody">
+      <div id="audGroups"></div>
+      <div class="audActions"><button type="button" id="audAll">Select all</button><span class="muted" id="audHint">Fewer segments means a faster, more focused Laya run.</span></div>
+    </div>
+  </details>
   <div class="engine" role="group" aria-label="Engine">
     <button type="button" data-engine="quick" aria-pressed="true">Quick <small>in your browser</small></button>
     <button type="button" data-engine="laya" aria-pressed="false">Laya <small>on my PC</small></button>
@@ -52,6 +59,22 @@
 </header>
 
 <main>
+  <section class="panel" id="paramInfo" aria-labelledby="piTitle">
+    <div class="panelHead">
+      <h2 id="piTitle">What Sibr checks</h2>
+      <span class="hint">Six parameters, one Sibr score out of 100</span>
+    </div>
+    <div class="pgrid">
+      <div class="pi"><b>Pain</b><span>Does the problem really hurt? Strong pain means people already spend time or money on workarounds.</span></div>
+      <div class="pi"><b>Value</b><span>Will customers pay for the solution, and how much?</span></div>
+      <div class="pi"><b>Target audience</b><span>Is there a clear first customer? A sharp target is cheaper to reach and easier to build for.</span></div>
+      <div class="pi"><b>Growth</b><span>Is the market growing, steady or shrinking?</span></div>
+      <div class="pi"><b>Islamic alignment</b><span>Looks for riba, gambling, haram categories, speculation and content concerns. A flag for scholarly review, never a ruling.</span></div>
+      <div class="pi"><b>Competition</b><span>Is the space open, competitive with room to stand out, or crowded?</span></div>
+    </div>
+    <p class="note">Sibr score = 65% the first four parameters, 20% competition, 15% Islamic alignment. Each idea is also scored for every audience segment you pick.</p>
+  </section>
+
   <section class="panel" aria-labelledby="mxTitle">
     <div class="panelHead">
       <h2 id="mxTitle">Validation matrix</h2>
