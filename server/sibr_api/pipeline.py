@@ -74,10 +74,22 @@ def build_questions() -> Dict[str, Any]:
 
 QUESTIONS = build_questions()
 SEGMENT_IDS = [sid for segs in SEGMENTS.values() for sid, *_ in segs]
+# Open mode without a working LLM scores this broad mix instead.
+OPEN_FALLBACK = ["us", "uk", "eu", "gcc", "sa", "sea", "glob", "a1", "a2", "a3", "a4", "gm", "gf", "im", "ih",
+                 "stu", "par", "prof", "sme", "stp", "ent", "ecom", "dia", "mass", "early"]
 
 
 # laya-serve answers at most 64 questions per call; bigger audiences go in several calls.
 MAX_PER_CALL = 64
+# seg_: a catalogue segment. aud_: an audience typed by the person or suggested by the LLM.
+AUDIENCE_PREFIXES = ("seg_", "aud_")
+MAX_EXTRA_AUDIENCES = 12
+# The persona pass writes a line for at most this many cells (best and worst fits).
+PERSONA_CELLS = 20
+
+
+def audience_question(who: str) -> Dict[str, Any]:
+    return {"type": "noul", "instructions": f"Would {who} want this and be willing to pay for it?"}
 
 
 def questions_for(segments: Optional[List[str]]) -> Dict[str, Any]:
@@ -91,8 +103,8 @@ def predict_batched(laya, state: Dict[str, Any], questions: Dict[str, Any]) -> D
     then the remaining segments in further calls on the same state. Answers are merged."""
     if len(questions) <= MAX_PER_CALL:
         return laya.predict(state, questions)
-    core = {k: q for k, q in questions.items() if not k.startswith("seg_")}
-    segs = [k for k in questions if k.startswith("seg_")]
+    core = {k: q for k, q in questions.items() if not k.startswith(AUDIENCE_PREFIXES)}
+    segs = [k for k in questions if k.startswith(AUDIENCE_PREFIXES)]
     first = MAX_PER_CALL - len(core)
     chunks = [segs[:first]] + [segs[i:i + MAX_PER_CALL] for i in range(first, len(segs), MAX_PER_CALL)]
     res = laya.predict(state, {**core, **{k: questions[k] for k in chunks[0]}})
@@ -120,8 +132,26 @@ class Pipeline:
                     card[k] = data[k].strip()
         return card
 
+    # Open mode: no audience picked, so the LLM proposes likely customers for Laya to score.
+    def suggest_audiences(self, text: str, card: Dict[str, str]) -> List[Dict[str, str]]:
+        data = self.llm.chat_json(
+            "You are a go-to-market analyst. List the 10 most likely distinct customer audiences for this business "
+            "idea, from most to least promising, across any demographic, profession, business type, place or "
+            "interest. Customers do not need to share the founder's faith. Keys: audiences (list of objects with "
+            "name: at most four words, and who: a plain description of the people or organisations).",
+            f"Idea: {text}\nCard: {card}", max_tokens=700)
+        out = []
+        for a in (data or {}).get("audiences", []) if isinstance(data, dict) else []:
+            if isinstance(a, dict) and isinstance(a.get("who"), str) and a["who"].strip():
+                who = a["who"].strip()[:160]
+                out.append({"name": str(a.get("name") or who).strip()[:40], "who": who})
+        return out[:MAX_EXTRA_AUDIENCES]
+
     # 3. Persona pass
     def persona(self, text: str, card: Dict[str, str], cells: List[Dict[str, Any]], ev: str = "") -> Dict[str, Any]:
+        if len(cells) > PERSONA_CELLS:
+            ranked = sorted(cells, key=lambda c: -c["fit"])
+            cells = ranked[:PERSONA_CELLS - 5] + ranked[-5:]
         listing = "\n".join(f"- {c['id']}: {c['name']} ({c['group']}), fit {round(c['fit'] * 100)}/100" for c in cells)
         data = self.llm.chat_json(
             "You are a startup analyst. For each audience segment, write one plain sentence on why the idea "
@@ -132,10 +162,15 @@ class Pipeline:
             max_tokens=min(4000, 400 + 45 * len(cells)))
         return data if isinstance(data, dict) else {}
 
-    def evaluate(self, text: str, segments: Optional[List[str]] = None) -> Dict[str, Any]:
+    def evaluate(self, text: str, segments: Optional[List[str]] = None, open_audience: bool = False,
+                 custom: Optional[List[str]] = None) -> Dict[str, Any]:
+        """segments: catalogue ids to score. open_audience: let the LLM suggest the audiences instead.
+        custom: audiences the person typed. With none of these, the core 21 are scored."""
         text = text.strip()
-        segments = [s for s in SEGMENT_IDS if s in set(segments or [])] or list(LEGACY_IDS)
-        questions = questions_for(segments)
+        custom = [c.strip()[:160] for c in custom or [] if c and c.strip()][:MAX_EXTRA_AUDIENCES]
+        segments = [s for s in SEGMENT_IDS if s in set(segments or [])]
+        if not segments and not open_audience and not custom:
+            segments = list(LEGACY_IDS)
         steps: List[Dict[str, Any]] = []
 
         def step(name: str, t0: float, ok: bool, detail: str):
@@ -146,6 +181,25 @@ class Pipeline:
         ok = self.llm.enabled and self.llm.last_error is None
         step("Idea card", t, ok, f"{self.llm.describe()['model']} wrote the card" if ok else
              f"LLM unavailable ({self.llm.last_error or 'off'}); used your text as is")
+
+        # Audiences that are not in the catalogue: typed by the person, or suggested in open mode.
+        extra = [{"id": f"c{i + 1}", "name": c if len(c) <= 40 else c[:38] + "…", "who": c, "group": "Your audiences"}
+                 for i, c in enumerate(custom)]
+        if open_audience:
+            t = time.perf_counter()
+            sug = self.suggest_audiences(text, card)
+            if sug:
+                step("Audience suggestions", t, True, f"{self.llm.describe()['model']} suggested {len(sug)} likely "
+                     "customer audiences for Laya to score: " + ", ".join(x["name"] for x in sug))
+            else:
+                segments = segments or [s for s in OPEN_FALLBACK if s in SEGMENT_IDS]
+                step("Audience suggestions", t, False, f"LLM unavailable ({self.llm.last_error or 'no usable reply'}); "
+                     f"scored a broad mix of {len(segments)} catalogue segments instead")
+            extra += [{"id": f"o{i + 1}", **x, "group": "Suggested by Sibr"} for i, x in enumerate(sug)]
+        questions = questions_for(segments) if segments else {k: q for k, q in QUESTIONS.items() if not k.startswith("seg_")}
+        for x in extra:
+            questions[f"aud_{x['id']}"] = audience_question(x["who"])
+        n_aud = len(segments) + len(extra)
 
         t = time.perf_counter()
         ev_items = self.evidence.pull(text, card)
@@ -161,7 +215,7 @@ class Pipeline:
         res = predict_batched(self.laya, state, questions)  # raises LayaUnavailable
         a = res.get("answers", {})
         laya_model = (res.get("routing") or {}).get("model") or res.get("model")
-        step("Laya verdicts", t, True, f"{len(questions)} typed questions ({len(segments)} audience segments) in "
+        step("Laya verdicts", t, True, f"{len(questions)} typed questions ({n_aud} audiences) in "
              f"{res.get('calls', 1)} pass{'es' if res.get('calls', 1) > 1 else ''} on the {laya_model} checkpoint" +
              ("" if len(text) <= LAYA_IDEA_CHARS else f"; long idea trimmed to {LAYA_IDEA_CHARS} characters plus the card"))
 
@@ -190,6 +244,13 @@ class Pipeline:
                 lenses[group].append({"id": sid, "name": name, "m": m, "fit": float(ans["noul"]),
                                       "confidence": conf, "escalate": conf is not None and conf < self.min_conf,
                                       "why": self._why(float(ans["noul"]), m, comp_key)})
+        for x in extra:
+            ans = a[f"aud_{x['id']}"]
+            conf = _conf(ans)
+            lenses.setdefault(x["group"], []).append({
+                "id": x["id"], "name": x["name"], "who": x["who"], "m": .75, "fit": float(ans["noul"]),
+                "confidence": conf, "escalate": conf is not None and conf < self.min_conf, "custom": True,
+                "why": self._why(float(ans["noul"]), .75, comp_key)})
         lenses = {g: cs for g, cs in lenses.items() if cs}
         cells = [{**c, "group": g} for g, cs in lenses.items() for c in cs]
 
@@ -217,6 +278,7 @@ class Pipeline:
         return {"idea": idea, "sibr": sibr, "isl": isl, "comp": comp, "lenses": lenses, "top": top,
                 "verdicts": verdicts, "evidence": ev_items,
                 "meta": {"engine": "laya", "laya_model": laya_model, "steps": steps, "segments": segments,
+                         "audience": {"open": open_audience, "custom": len(custom), "suggested": sum(x["group"] == "Suggested by Sibr" for x in extra)},
                          "llm": self.llm.describe(), "llm_used": any(s["ok"] for s in steps if s["step"] in ("Idea card", "Persona pass")),
                          "llm_error": self.llm.last_error}}
 
