@@ -23,6 +23,8 @@ from sibr_api.llm import LLM
 from sibr_api.pipeline import CARD_FIELDS, COMP_Q, ISL_Q, QUESTIONS, SCORES
 from sibr_api.segments import LEGACY_IDS, SEGMENTS, TAGS
 
+from .gold import gold_ideas, norm
+
 DATA = Path(__file__).resolve().parent / "data"
 SEG_IDS = {sid: (name, who) for segs in SEGMENTS.values() for sid, name, _m, who in segs}
 MODELS = ["subscription app", "marketplace", "B2B service", "physical product", "course or community",
@@ -95,7 +97,10 @@ def to_row(idea: str, card: dict, lab: dict, seg_ids=None) -> dict:
 
 
 def write_splits(records, eval_frac: float, seed: int):
-    rows = [to_row(r["idea"], r["card"], r["labels"], r.get("seg_ids")) for r in records]
+    gold = gold_ideas()  # the gold set measures the model, so it is never trained on
+    rows = [to_row(r["idea"], r["card"], r["labels"], r.get("seg_ids")) for r in records if norm(r["idea"]) not in gold]
+    if len(rows) < len(records):
+        print(f"left out {len(records) - len(rows)} gold-set ideas")
     random.Random(seed).shuffle(rows)
     k = max(1, int(len(rows) * eval_frac))
     for name, part in (("eval", rows[:k]), ("train", rows[k:])):
