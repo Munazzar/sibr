@@ -8,12 +8,23 @@ $model = if ($env:SIBR_LLM_MODEL) { $env:SIBR_LLM_MODEL } else { "llama3.2:3b" }
 Write-Host "== Python environment"
 $py = Join-Path $server ".venv\Scripts\python.exe"
 if (-not (Test-Path $py)) {
-    if (Get-Command py -ErrorAction SilentlyContinue) { py -3 -m venv (Join-Path $server ".venv") }
-    else { python -m venv (Join-Path $server ".venv") }
+    # First Python that can actually build a venv (some installs lack _socket/ssl and break ensurepip).
+    $base = @((Get-Command python -All -ErrorAction SilentlyContinue).Source) +
+        (Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe") |
+        Where-Object { $_ -and (Test-Path $_) -and -not ($_ -like "*WindowsApps*") } |
+        Where-Object { $ErrorActionPreference = "Continue"; & $_ -c "import ssl" 2>$null; $LASTEXITCODE -eq 0 } | Select-Object -First 1
+    if (-not $base) { Write-Host "No working Python 3 found. Install it with: winget install Python.Python.3.12"; exit 1 }
+    & $base -m venv (Join-Path $server ".venv")
+    if ($LASTEXITCODE) { exit 1 }
 }
 & $py -m pip install --upgrade pip
-& $py -m pip install -r (Join-Path $server "requirements.txt")
-& $py -m pip install pytest
+if ($LASTEXITCODE) { exit 1 }
+# NVIDIA GPU: take the CUDA torch build before laya pulls the CPU one.
+if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+    & $py -m pip install torch --index-url https://download.pytorch.org/whl/cu128
+}
+& $py -m pip install -r (Join-Path $server "requirements.txt") pytest
+if ($LASTEXITCODE) { exit 1 }
 
 $envFile = Join-Path $server ".env"
 if (-not (Test-Path $envFile)) { Copy-Item (Join-Path $server ".env.example") $envFile }
