@@ -1,5 +1,5 @@
 (function () {
-  const { SEED, ISL, COMP, fromText, evaluate } = window.Sibr;
+  const { SEED, SEGMENTS, ISL, COMP, fromText, evaluate } = window.Sibr;
   const $ = s => document.querySelector(s);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const MARK = { g: "✓", m: "~", b: "✕" };
@@ -50,16 +50,16 @@
     const rows = visibleRows();
     $("#fCount").textContent = `${rows.length} of ${results.length} ideas`;
     $("#matrix tbody").innerHTML = rows.length ? rows.map(({ r, i }, n) => {
-      const d = n * 50, it = r.idea;
+      const d = Math.min(n, 8) * 30, it = r.idea;
       return `<tr data-i="${i}" class="${i === active ? "active" : ""}" style="animation-delay:${d}ms" tabindex="0">
         <td>${n + 1}</td>
         <td class="left"><span class="nm">${esc(it.name)}</span><small>${esc(it.note || "")}${engineOf(r) === "laya" ? ' <em class="eng">Laya</em>' : ""}</small></td>
-        <td data-label="Pain">${chip(it.pain, MARK[it.pain], d + 120)}</td>
-        <td data-label="Value">${chip(it.value, MARK[it.value], d + 170)}</td>
-        <td data-label="Target">${chip(it.target, MARK[it.target], d + 220)}</td>
-        <td data-label="Growth">${chip(it.growth, MARK[it.growth], d + 270)}</td>
-        <td data-label="Islamic">${chip(r.isl.cls, r.isl.label, d + 320)}</td>
-        <td data-label="Comp.">${chip(r.comp.cls, r.comp.label, d + 370)}</td>
+        <td data-label="Pain">${chip(it.pain, MARK[it.pain], d + 60)}</td>
+        <td data-label="Value">${chip(it.value, MARK[it.value], d + 80)}</td>
+        <td data-label="Target">${chip(it.target, MARK[it.target], d + 100)}</td>
+        <td data-label="Growth">${chip(it.growth, MARK[it.growth], d + 120)}</td>
+        <td data-label="Islamic">${chip(r.isl.cls, r.isl.label, d + 140)}</td>
+        <td data-label="Comp.">${chip(r.comp.cls, r.comp.label, d + 160)}</td>
         <td class="sibr"><span class="ring" style="--c:${color(r.sibr / 100)}" data-p="${r.sibr}"><span>${r.sibr}</span></span></td>
       </tr>`;
     }).join("") : `<tr><td colspan="9" class="empty">No ideas match these filters.</td></tr>`;
@@ -161,11 +161,43 @@
     } else {
       html = `<ol class="trace"><li class="ok"><b>Keyword scan</b><span class="ms">&lt;0.1 s</span><span>Found themes: ${esc((r.idea.tags || []).join(", "))}.</span></li>
         <li class="ok"><b>Rules</b><span class="ms">&lt;0.1 s</span><span>Pain, value, target, growth, competition and Islamic flags come from fixed rules in engine.js.</span></li>
-        <li class="ok"><b>Lens grid</b><span class="ms">&lt;0.1 s</span><span>Each of the 21 segments is scored by how strongly it cares about those themes and its spending power.</span></li></ol>
+        <li class="ok"><b>Lens grid</b><span class="ms">&lt;0.1 s</span><span>Each of the ${segCount(r)} segments you picked is scored by how strongly it cares about those themes and its spending power.</span></li></ol>
         <p class="muted">Nothing left your browser. ${r.fallback ? `Laya was not used: ${esc(r.fallback)}.` : "Pick “Laya on my PC” for the full model."}</p>`;
     }
     $("#traceBody").innerHTML = html;
   }
+
+  const segCount = r => Object.values(r.lenses).reduce((n, cs) => n + cs.length, 0);
+
+  // ---------- Audience picked before the run ----------
+  const ALL_SEGS = Object.values(SEGMENTS).flat().map(s => s.id);
+  let aud;
+  try { aud = new Set(JSON.parse(localStorage.getItem("sibrAud") || "null") || ALL_SEGS); } catch { aud = new Set(ALL_SEGS); }
+  aud = new Set(ALL_SEGS.filter(id => aud.has(id)));
+  if (!aud.size) aud = new Set(ALL_SEGS);
+  const audList = () => aud.size === ALL_SEGS.length ? null : ALL_SEGS.filter(id => aud.has(id));
+  function renderAudience() {
+    $("#audGroups").innerHTML = Object.entries(SEGMENTS).map(([g, segs]) => {
+      const on = segs.filter(x => aud.has(x.id)).length;
+      return `<div class="audGroup"><button type="button" class="audG" data-g="${esc(g)}" aria-pressed="${on === segs.length}">${esc(g)} <small>${on}/${segs.length}</small></button>
+        <div class="audSegs">${segs.map(x => `<button type="button" class="audS" data-id="${x.id}" aria-pressed="${aud.has(x.id)}">${esc(x.name)}</button>`).join("")}</div></div>`;
+    }).join("");
+    const n = aud.size;
+    $("#audSum").textContent = n === ALL_SEGS.length ? `All ${n} segments` : `${n} of ${ALL_SEGS.length} segments`;
+    try { localStorage.setItem("sibrAud", JSON.stringify([...aud])); } catch {}
+  }
+  $("#audGroups").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.classList.contains("audS")) {
+      if (aud.has(b.dataset.id)) { if (aud.size > 1) aud.delete(b.dataset.id); } else aud.add(b.dataset.id);
+    } else {
+      const ids = SEGMENTS[b.dataset.g].map(x => x.id), all = ids.every(id => aud.has(id));
+      if (all) { ids.forEach(id => aud.delete(id)); if (!aud.size) ids.forEach(id => aud.add(id)); } else ids.forEach(id => aud.add(id));
+    }
+    renderAudience();
+  });
+  $("#audAll").addEventListener("click", () => { aud = new Set(ALL_SEGS); renderAudience(); });
+  renderAudience();
 
   // ---------- Lens map with filters ----------
   const LF = { group: "", min: 0, sort: "default", low: false };
@@ -257,16 +289,16 @@
     } catch { status("Can't reach it. Is this device on Tailscale and is Sibr running on your PC?", false); }
   });
 
-  async function remote(text, retry = true) {
+  async function remote(text, segments, retry = true) {
     if (!apiUrl()) throw new Error("no Laya address set");
     const headers = { "content-type": "application/json" };
     if (ls.get("sibrKey")) headers["x-sibr-key"] = ls.get("sibrKey");
     let res;
-    try { res = await fetch(apiUrl() + "/evaluate", { method: "POST", headers, body: JSON.stringify({ idea: text }) }); }
+    try { res = await fetch(apiUrl() + "/evaluate", { method: "POST", headers, body: JSON.stringify(segments ? { idea: text, segments } : { idea: text }) }); }
     catch { throw new Error("can't reach your PC. Connect this device to Tailscale and check Sibr is running"); }
     if (res.status === 401 && retry) {
       const k = prompt("Sibr access key");
-      if (k) { ls.set("sibrKey", k.trim()); renderEngine(); return remote(text, false); }
+      if (k) { ls.set("sibrKey", k.trim()); renderEngine(); return remote(text, segments, false); }
     }
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "HTTP " + res.status);
     return res.json();
@@ -276,10 +308,10 @@
   const STAGES = {
     laya: [["Reading your idea", "The LLM writes an idea card: problem, user, solution, revenue, delivery."],
            ["Searching the web", "Three free searches for competitors, Reddit threads and reviews."],
-           ["Asking Laya", "43 typed questions answered in one pass: scores, choices and 21 segment fits."],
+           ["Asking Laya", "Typed questions answered in one pass: scores, choices and a fit for each segment you picked."],
            ["Writing the verdict", "The LLM explains each segment and sums up."]],
     quick: [["Scanning keywords", "Finding the themes in your idea."], ["Applying rules", "Scoring the six parameters."],
-            ["Mapping 21 segments", "Geography, age, community and interest."]]
+            ["Mapping your segments", "Scoring each audience you picked."]]
   };
   let stageTimer = null;
   function startProcessing(kind) {
@@ -293,14 +325,15 @@
     const mark = () => el.querySelectorAll("li").forEach((li, n) => li.className = n < i ? "done" : n === i ? "now" : "");
     mark();
     // The service answers in one go, so stages advance on typical timings (and wait on the last one).
-    const step = kind === "laya" ? [6000, 9000, 5000] : [250, 250];
+    const step = kind === "laya" ? [6000, 9000, 5000] : [110, 110];
     const tick = () => { if (i < st.length - 1) { i++; mark(); stageTimer = setTimeout(tick, step[i] || 4000); } };
     stageTimer = setTimeout(tick, step[0]);
     const clock = setInterval(() => { const s = (performance.now() - t0) / 1000; el.querySelector(".elapsed").textContent = `${s.toFixed(1)} s`; }, 100);
     return () => {
       clearTimeout(stageTimer); clearInterval(clock);
       i = st.length; mark();
-      return new Promise(res => setTimeout(() => { el.classList.remove("on"); setTimeout(() => { el.hidden = true; res(); }, 300); }, 350));
+      const hold = kind === "quick" ? 120 : 350;
+      return new Promise(res => setTimeout(() => { el.classList.remove("on"); setTimeout(() => { el.hidden = true; res(); }, 200); }, hold));
     };
   }
 
@@ -332,12 +365,13 @@
     if (!v || btn.disabled) return;
     btn.disabled = true; btn.textContent = engine === "laya" ? "Running Laya…" : "Running…";
     const stop = startProcessing(engine === "laya" ? "laya" : "quick");
+    const segs = audList();
     let r;
     try {
       if (engine === "laya") {
-        try { r = await remote(v); }
-        catch (err) { r = evaluate(fromText(v)); r.fallback = err.message; }
-      } else { await new Promise(res => setTimeout(res, 800)); r = evaluate(fromText(v)); }
+        try { r = await remote(v, segs); }
+        catch (err) { r = evaluate(fromText(v), segs); r.fallback = err.message; }
+      } else { await new Promise(res => setTimeout(res, 350)); r = evaluate(fromText(v), segs); }
     } finally { await stop(); btn.disabled = false; renderEngine(); }
     results.unshift(r);
     active = 0;
@@ -349,41 +383,23 @@
   renderEngine();
   renderAll();
 
-  // Animated background: slowly rotating square lattice
-  const cv = $("#bg"), ctx = cv.getContext("2d");
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let W, H, DPR;
-  // The lattice is faint and blurred by opacity, so 1x resolution at ~30 fps looks the same and
-  // leaves the main thread free for typing.
-  function size() { DPR = 1; W = cv.width = innerWidth * DPR; H = cv.height = innerHeight * DPR; }
-  addEventListener("resize", size); size();
-  function star(x, y, r, a, alpha) {
-    ctx.strokeStyle = `rgba(214,180,106,${alpha})`;
-    for (const off of [0]) {
-      ctx.beginPath();
-      for (let k = 0; k < 4; k++) {
-        const t = a + off + k * Math.PI / 2;
-        ctx[k ? "lineTo" : "moveTo"](x + Math.cos(t) * r, y + Math.sin(t) * r);
-      }
-      ctx.closePath(); ctx.stroke();
-    }
-  }
-  let last = -1e9;
-  function frame(ts) {
-    if (!reduce) requestAnimationFrame(frame);
-    if (document.hidden || ts - last < 33) return;
-    last = ts;
-    const t = ts / 1000;
-    ctx.clearRect(0, 0, W, H);
-    ctx.lineWidth = DPR;
-    const step = 120 * DPR;
-    for (let y = -step; y < H + step; y += step)
-      for (let x = -step; x < W + step; x += step) {
-        const ox = (y / step) % 2 ? step / 2 : 0;
-        const px = x + ox, py = y + ((t * 6 * DPR) % step);
-        const pulse = .05 + .07 * (.5 + .5 * Math.sin(t * .8 + px * .004 + py * .003));
-        star(px, py, 30 * DPR, t * .08 + (px + py) * .0005, pulse);
+  // Background lattice. Drawn once (and on resize); the slow drift is a CSS transform, so it
+  // runs on the GPU compositor and costs the page nothing while you type or scroll.
+  const cv = $("#bg"), ctx = cv.getContext("2d"), STEP = 120;
+  function drawBg() {
+    const W = cv.width = innerWidth, H = cv.height = innerHeight + 2 * STEP;
+    ctx.lineWidth = 1;
+    for (let y = 0; y < H + STEP; y += STEP)
+      for (let x = -STEP; x < W + STEP; x += STEP) {
+        const px = x + ((y / STEP) % 2 ? STEP / 2 : 0), py = y;
+        const a = (px + py) * .0005, alpha = .05 + .07 * (.5 + .5 * Math.sin(px * .004 + py * .003));
+        ctx.strokeStyle = `rgba(214,180,106,${alpha.toFixed(3)})`;
+        ctx.beginPath();
+        for (let k = 0; k < 4; k++) { const t = a + k * Math.PI / 2; ctx[k ? "lineTo" : "moveTo"](px + Math.cos(t) * 30, py + Math.sin(t) * 30); }
+        ctx.closePath(); ctx.stroke();
       }
   }
-  requestAnimationFrame(frame);
+  let bgTimer; let lastW = innerWidth;
+  addEventListener("resize", () => { if (innerWidth === lastW && innerHeight + 2 * STEP <= cv.height) return; lastW = innerWidth; clearTimeout(bgTimer); bgTimer = setTimeout(drawBg, 150); });
+  drawBg();
 })();

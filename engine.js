@@ -124,14 +124,18 @@
     };
   }
 
-  function evaluate(idea) {
+  // `only`: optional list of segment ids to score (the audience picked before the run).
+  function evaluate(idea, only) {
+    const keep = only && only.length ? new Set(only) : null;
     if (!idea.islamicNotes) idea.islamicNotes = islamic(idea.name + " " + (idea.note || "")).notes;
     const base = (LEVEL[idea.pain] + LEVEL[idea.value] + LEVEL[idea.target] + LEVEL[idea.growth]) / 4;
     const isl = ISL[idea.islamic], comp = COMP[idea.comp];
     const sibr = Math.round(100 * (base * .65 + comp.v * .2 + isl.v * .15));
 
     const lenses = {};
-    for (const [group, segs] of Object.entries(SEGMENTS)) {
+    for (const [group, all] of Object.entries(SEGMENTS)) {
+      const segs = keep ? all.filter(s => keep.has(s.id)) : all;
+      if (!segs.length) continue;
       lenses[group] = segs.map(seg => {
         const matches = idea.tags.map(t => [t, seg.aff[t] || 0]).sort((a, b) => b[1] - a[1]);
         const aff = matches.length ? (matches[0][1] * .7 + matches.slice(1).reduce((s, m) => s + m[1], 0) / Math.max(1, matches.length - 1) * .3) : 0;
@@ -152,5 +156,5 @@
     return { idea, sibr, isl, comp, lenses, top };
   }
 
-  window.Sibr = { SEED, LEVEL, ISL, COMP, fromText, evaluate };
+  window.Sibr = { SEED, SEGMENTS, LEVEL, ISL, COMP, fromText, evaluate };
 })();

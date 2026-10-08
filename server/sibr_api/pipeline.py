@@ -73,6 +73,13 @@ def build_questions() -> Dict[str, Any]:
 
 
 QUESTIONS = build_questions()
+SEGMENT_IDS = [sid for segs in SEGMENTS.values() for sid, *_ in segs]
+
+
+def questions_for(segments: Optional[List[str]]) -> Dict[str, Any]:
+    """All questions, minus the segment questions the person filtered out before the run."""
+    keep = set(segments or SEGMENT_IDS)
+    return {k: q for k, q in QUESTIONS.items() if not k.startswith("seg_") or k[4:] in keep}
 
 
 class Pipeline:
@@ -105,8 +112,10 @@ class Pipeline:
             max_tokens=1200)
         return data if isinstance(data, dict) else {}
 
-    def evaluate(self, text: str) -> Dict[str, Any]:
+    def evaluate(self, text: str, segments: Optional[List[str]] = None) -> Dict[str, Any]:
         text = text.strip()
+        segments = [s for s in SEGMENT_IDS if s in set(segments or [])] or SEGMENT_IDS
+        questions = questions_for(segments)
         steps: List[Dict[str, Any]] = []
 
         def step(name: str, t0: float, ok: bool, detail: str):
@@ -129,10 +138,10 @@ class Pipeline:
         if ev:
             state["evidence"] = ev
         t = time.perf_counter()
-        res = self.laya.predict(state, QUESTIONS)  # raises LayaUnavailable
+        res = self.laya.predict(state, questions)  # raises LayaUnavailable
         a = res.get("answers", {})
         laya_model = (res.get("routing") or {}).get("model") or res.get("model")
-        step("Laya verdicts", t, True, f"{len(QUESTIONS)} typed questions in one pass on the {laya_model} checkpoint" +
+        step("Laya verdicts", t, True, f"{len(questions)} typed questions ({len(segments)} audience segments) in one pass on the {laya_model} checkpoint" +
              ("" if len(text) <= LAYA_IDEA_CHARS else f"; long idea trimmed to {LAYA_IDEA_CHARS} characters plus the card"))
 
         dims = {k: float(a[k]["score"]) / (len(SCORES[k][1]) - 1) for k in SCORES}
@@ -153,11 +162,14 @@ class Pipeline:
         for group, segs in SEGMENTS.items():
             lenses[group] = []
             for sid, name, m, who in segs:
+                if sid not in segments:
+                    continue
                 ans = a[f"seg_{sid}"]
                 conf = _conf(ans)
                 lenses[group].append({"id": sid, "name": name, "m": m, "fit": float(ans["noul"]),
                                       "confidence": conf, "escalate": conf is not None and conf < self.min_conf,
                                       "why": self._why(float(ans["noul"]), m, comp_key)})
+        lenses = {g: cs for g, cs in lenses.items() if cs}
         cells = [{**c, "group": g} for g, cs in lenses.items() for c in cs]
 
         t = time.perf_counter()
@@ -183,7 +195,7 @@ class Pipeline:
                                "probabilities": a["islamic"].get("probabilities"), "confidence": _conf(a["islamic"])}
         return {"idea": idea, "sibr": sibr, "isl": isl, "comp": comp, "lenses": lenses, "top": top,
                 "verdicts": verdicts, "evidence": ev_items,
-                "meta": {"engine": "laya", "laya_model": laya_model, "steps": steps,
+                "meta": {"engine": "laya", "laya_model": laya_model, "steps": steps, "segments": segments,
                          "llm": self.llm.describe(), "llm_used": any(s["ok"] for s in steps if s["step"] in ("Idea card", "Persona pass")),
                          "llm_error": self.llm.last_error}}
 
