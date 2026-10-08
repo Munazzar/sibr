@@ -26,19 +26,25 @@ class LocalLaya:
                 from laya import Router
             except ImportError as e:
                 raise LayaUnavailable("laya is not installed; pip install laya or set SIBR_LAYA_MODE=http") from e
-            self._router = Router()
+            # A fine-tuned checkpoint is registered under its own name and pinned.
+            models = {"sibr": self.s.laya_checkpoint} if self.s.laya_checkpoint else None
+            self._router = Router(models=models)
         return self._router
+
+    @property
+    def model_name(self) -> Optional[str]:
+        return "sibr" if self.s.laya_checkpoint else (self.s.laya_model or None)
 
     def predict(self, state: Any, questions: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            return self._load().predict(state, questions, model=self.s.laya_model or None)
+            return self._load().predict(state, questions, model=self.model_name)
         except LayaUnavailable:
             raise
         except Exception as e:  # checkpoint download, OOM, bad input
             raise LayaUnavailable(f"{type(e).__name__}: {e}") from e
 
     def describe(self) -> dict:
-        return {"mode": "local", "model": self.s.laya_model}
+        return {"mode": "local", "model": self.model_name, "checkpoint": self.s.laya_checkpoint or None}
 
 
 class HttpLaya:

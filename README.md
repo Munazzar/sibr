@@ -17,11 +17,11 @@ Ideas typed into the site go to the **model service** in [`server/`](server/READ
 
 | Step | Status |
 |---|---|
-| 1. **Idea card**: problem, user, solution, revenue, delivery | Built: a swappable LLM (Ollama, Hugging Face, Groq, OpenRouter, OpenAI) |
+| 1. **Idea card**: problem, user, solution, revenue, delivery | Built: a swappable LLM, free local Ollama by default |
 | 2. **Lens grid**: segment cells | Built: 21 cells, shared with `engine.js` |
-| 3. **Evidence pull**: competitors, reviews, forums, trends | Not built yet |
+| 3. **Evidence pull**: competitors, reviews, forums, trends | Built: free DuckDuckGo search, three queries per idea |
 | 4. **LLM persona pass**: a short analysis per cell | Built: one line per cell plus a verdict |
-| 5. **Verdict heads**: [Laya](https://github.com/NandhaKishorM/laya) typed, calibrated verdicts, low-confidence cells escalated | Built on the stock zero-shot `laya` checkpoint; not fine-tuned yet |
+| 5. **Verdict heads**: [Laya](https://github.com/NandhaKishorM/laya) typed, calibrated verdicts, low-confidence cells escalated | Built. Runs the stock checkpoint until you fine-tune one with `server/training/` |
 
 Point the site at a running service with `window.SIBR_API` in `config.js`, or add `?api=https://your-service` to the page URL.
 
@@ -35,4 +35,4 @@ The site is static with no build step. Open `index.html` directly, or serve the 
 python3 -m http.server 8080
 ```
 
-To run the model service as well, see [`server/README.md`](server/README.md), then open `http://localhost:8080/?api=http://localhost:8787`.
+On Windows, `scripts\setup.ps1` then `scripts\start.ps1` runs everything locally for free. Otherwise see [`server/README.md`](server/README.md), then open `http://localhost:8080/?api=http://localhost:8787`.

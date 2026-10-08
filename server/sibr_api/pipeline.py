@@ -4,13 +4,15 @@
 2. Verdicts    Laya answers typed questions on the card: pain, value, target, growth
                (score), competition and Islamic alignment (choice), themes and every
                lens cell (noul). One forward pass.
+   Evidence    Free web search results (competitors, forums, reviews) are added to the
+               state Laya reads and to the persona prompt.
 3. Persona     LLM writes a one-line read per lens cell and a short verdict.
 
 The response matches the shape `Sibr.evaluate` returns in ../engine.js, so the
-existing UI renders it unchanged. Evidence pull (step 3 of the README plan) is
-not built yet."""
+existing UI renders it unchanged, plus an `evidence` list of links."""
 from typing import Any, Dict, List, Optional
 
+from .evidence import Evidence, digest
 from .llm import LLM
 from .segments import ISLAMIC_ORDER, SEGMENTS, TAGS, keyword_flags
 
@@ -70,8 +72,9 @@ QUESTIONS = build_questions()
 
 
 class Pipeline:
-    def __init__(self, laya, llm: LLM, min_confidence: float = 0.5):
+    def __init__(self, laya, llm: LLM, min_confidence: float = 0.5, evidence: Optional[Evidence] = None):
         self.laya, self.llm, self.min_conf = laya, llm, min_confidence
+        self.evidence = evidence or Evidence("off")
 
     # 1. Idea card
     def idea_card(self, text: str) -> Dict[str, str]:
@@ -87,20 +90,25 @@ class Pipeline:
         return card
 
     # 3. Persona pass
-    def persona(self, text: str, card: Dict[str, str], cells: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def persona(self, text: str, card: Dict[str, str], cells: List[Dict[str, Any]], ev: str = "") -> Dict[str, Any]:
         listing = "\n".join(f"- {c['id']}: {c['name']} ({c['group']}), fit {round(c['fit'] * 100)}/100" for c in cells)
         data = self.llm.chat_json(
             "You are a startup analyst. For each audience segment, write one plain sentence on why the idea "
             "does or doesn't fit that segment, consistent with the given fit score. Then write a two-sentence "
             "overall verdict. Never give religious rulings. Keys: summary (string), cells (object mapping "
             "segment id to sentence).",
-            f"Idea: {text}\nCard: {card}\nSegments:\n{listing}", max_tokens=1200)
+            f"Idea: {text}\nCard: {card}\n" + (f"Web evidence: {ev}\n" if ev else "") + f"Segments:\n{listing}",
+            max_tokens=1200)
         return data if isinstance(data, dict) else {}
 
     def evaluate(self, text: str) -> Dict[str, Any]:
         text = text.strip()
         card = self.idea_card(text)
         state = {"idea": text, **{k: v for k, v in card.items() if v}}
+        ev_items = self.evidence.pull(card)
+        ev = digest(ev_items)
+        if ev:
+            state["evidence"] = ev
         res = self.laya.predict(state, QUESTIONS)  # raises LayaUnavailable
         a = res.get("answers", {})
 
@@ -129,7 +137,7 @@ class Pipeline:
                                       "why": self._why(float(ans["noul"]), m, comp_key)})
         cells = [{**c, "group": g} for g, cs in lenses.items() for c in cs]
 
-        p = self.persona(text, card, cells)
+        p = self.persona(text, card, cells, ev)
         lines = p.get("cells") if isinstance(p.get("cells"), dict) else {}
         for c in [c for cs in lenses.values() for c in cs]:
             if isinstance(lines.get(c["id"]), str):
@@ -144,7 +152,7 @@ class Pipeline:
         verdicts["comp"] = {"value": comp_key, "confidence": _conf(a["comp"])}
         verdicts["islamic"] = {"value": laya_isl, "confidence": _conf(a["islamic"])}
         return {"idea": idea, "sibr": sibr, "isl": isl, "comp": comp, "lenses": lenses, "top": top,
-                "verdicts": verdicts,
+                "verdicts": verdicts, "evidence": ev_items,
                 "meta": {"engine": "laya", "laya_model": (res.get("routing") or {}).get("model") or res.get("model"),
                          "llm": self.llm.describe(), "llm_used": self.llm.last_error is None and self.llm.enabled,
                          "llm_error": self.llm.last_error}}

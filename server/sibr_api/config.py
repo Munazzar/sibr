@@ -31,14 +31,9 @@ LLM_PRESETS = {
 }
 
 
-def _default_provider() -> str:
-    # Prefer a hosted free tier when a token is present, otherwise a local Ollama.
-    return "huggingface" if os.getenv("HF_TOKEN") else "ollama"
-
-
 @dataclass
 class Settings:
-    llm_provider: str = field(default_factory=lambda: os.getenv("SIBR_LLM_PROVIDER", _default_provider()))
+    llm_provider: str = field(default_factory=lambda: os.getenv("SIBR_LLM_PROVIDER", "ollama"))
     llm_base_url: str = field(default_factory=lambda: os.getenv("SIBR_LLM_BASE_URL", ""))
     llm_model: str = field(default_factory=lambda: os.getenv("SIBR_LLM_MODEL", ""))
     llm_api_key: str = field(default_factory=lambda: os.getenv("SIBR_LLM_API_KEY", ""))
@@ -49,7 +44,13 @@ class Settings:
     laya_url: str = field(default_factory=lambda: os.getenv("SIBR_LAYA_URL", "http://localhost:8000"))
     laya_api_key: str = field(default_factory=lambda: os.getenv("SIBR_LAYA_API_KEY", ""))
     laya_model: str = field(default_factory=lambda: os.getenv("SIBR_LAYA_MODEL", "english"))
+    # A fine-tuned checkpoint directory (see training/). When set it replaces the stock model.
+    laya_checkpoint: str = field(default_factory=lambda: os.getenv("SIBR_LAYA_CHECKPOINT", ""))
     laya_min_confidence: float = field(default_factory=lambda: float(os.getenv("SIBR_LAYA_MIN_CONFIDENCE", "0.5")))
+
+    # Free web evidence via DuckDuckGo (no key). "off" skips the step.
+    evidence: str = field(default_factory=lambda: os.getenv("SIBR_EVIDENCE", "ddg"))
+    evidence_results: int = field(default_factory=lambda: int(os.getenv("SIBR_EVIDENCE_RESULTS", "3")))
 
     cors_origins: str = field(default_factory=lambda: os.getenv(
         "SIBR_CORS_ORIGINS", "https://munazzar.github.io,http://localhost:8080,http://127.0.0.1:8080"))

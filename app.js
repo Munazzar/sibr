@@ -47,7 +47,8 @@
     requestAnimationFrame(() => setTimeout(() => document.querySelectorAll(".bar i").forEach(b => b.style.width = b.dataset.w + "%"), 40));
     const isl = r.idea.islamicNotes || [];
     $("#best").innerHTML = (r.idea.summary ? `${esc(r.idea.summary)}<br>` : "") + `Strongest fit: ${r.top.map(t => `<b>${esc(t.name)}</b> <small>(${t.group})</small>`).join(" · ")}` +
-      (isl.length ? `<br>Islamic review flags: ${isl.map(esc).join("; ")}` : "");
+      (isl.length ? `<br>Islamic review flags: ${isl.map(esc).join("; ")}` : "") +
+      (r.evidence && r.evidence.length ? `<br>Evidence: ${r.evidence.slice(0, 6).map(e => /^https?:/.test(e.url) ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.title || e.url)}</a>` : "").filter(Boolean).join(" · ")}` : "");
     document.querySelectorAll(".cell").forEach(c => c.addEventListener("click", () => openCell(c.dataset.g, c.dataset.id)));
   }
 
@@ -61,7 +62,7 @@
       ${s.analysis ? `<p>${esc(s.analysis)}</p>` : ""}
       <ul>${s.why.map(w => `<li>${esc(w)}</li>`).join("")}</ul>
       ${r.meta && r.meta.engine === "laya"
-        ? `<p class="note">Laya verdict${s.confidence != null ? `, confidence ${Math.round(s.confidence * 100)}%` : ""}.${s.escalate ? " <b>Low confidence: needs a human check.</b>" : ""} Evidence pull (reviews, forums, competitors) is not wired in yet.</p>`
+        ? `<p class="note">Laya verdict${s.confidence != null ? `, confidence ${Math.round(s.confidence * 100)}%` : ""}.${s.escalate ? " <b>Low confidence: needs a human check.</b>" : ""} ${r.evidence && r.evidence.length ? `Backed by ${r.evidence.length} web results (listed under the lens map).` : "No web evidence was found for this run."}</p>`
         : `<p class="note">Heuristic estimate${r.fallback ? ` (model service unreachable: ${esc(r.fallback)})` : ""}. With the model service connected this cell is a calibrated Laya verdict.</p>`}`;
     $("#drawer").classList.add("open");
     $("#drawer").setAttribute("aria-hidden", "false");

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from . import __version__
 from .config import Settings
+from .evidence import Evidence
 from .laya_client import LayaUnavailable, make_laya
 from .llm import LLM
 from .pipeline import Pipeline
@@ -20,14 +21,16 @@ class EvaluateIn(BaseModel):
 
 def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:
     settings = settings or Settings()
-    pipeline = pipeline or Pipeline(make_laya(settings), LLM(settings), settings.laya_min_confidence)
+    pipeline = pipeline or Pipeline(make_laya(settings), LLM(settings), settings.laya_min_confidence,
+                                    Evidence(settings.evidence, settings.evidence_results))
     app = FastAPI(title="Sibr model service", version=__version__)
     app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
                        allow_methods=["GET", "POST"], allow_headers=["content-type"])
 
     @app.get("/health")
     def health():
-        return {"ok": True, "version": __version__, "laya": pipeline.laya.describe(), "llm": pipeline.llm.describe()}
+        return {"ok": True, "version": __version__, "laya": pipeline.laya.describe(), "llm": pipeline.llm.describe(),
+                "evidence": pipeline.evidence.mode}
 
     @app.post("/evaluate")
     def evaluate(body: EvaluateIn):
