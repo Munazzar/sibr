@@ -4,6 +4,8 @@
 
 **Live:** https://munazzar.github.io/sibr/
 
+**How it works:** [docs/how-it-works.pdf](docs/how-it-works.pdf), a full breakdown with diagrams.
+
 ## What's in this release
 
 - An animated validation matrix seeded with six ideas.
