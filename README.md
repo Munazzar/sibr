@@ -1,6 +1,6 @@
 # Sibr Matrix
 
-**Sibr (صبر)** is a business idea validation matrix. It scores an idea on pain, value, target clarity, market growth, Islamic alignment, and competition. It then breaks the idea down across geographies, age groups, communities, and interests to show where it actually wins.
+**Sibr (سبر, "to probe, to test the depth of")** is a business idea validation matrix. It scores an idea on pain, value, target clarity, market growth, Islamic alignment, and competition. It then breaks the idea down across geographies, age groups, communities, and interests to show where it actually wins.
 
 **Live:** https://munazzar.github.io/sibr/
 

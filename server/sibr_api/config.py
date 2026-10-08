@@ -54,6 +54,10 @@ class Settings:
 
     # When set, /evaluate requires this key in the X-Sibr-Key header.
     api_key: str = field(default_factory=lambda: os.getenv("SIBR_API_KEY", ""))
+    # Opens the live request log at /logs (separate from api_key, which peers also have).
+    admin_key: str = field(default_factory=lambda: os.getenv("SIBR_ADMIN_KEY", ""))
+    # Every request is appended here as one JSON line (relative to server/). Empty turns it off.
+    log_file: str = field(default_factory=lambda: os.getenv("SIBR_LOG_FILE", "logs/requests.jsonl"))
     # Serve the site from this service too (one port, same origin; what `tailscale serve` exposes).
     serve_site: bool = field(default_factory=lambda: os.getenv("SIBR_SERVE_SITE", "1") != "0")
 

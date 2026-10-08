@@ -1,5 +1,5 @@
 (function () {
-  const { SEED, SEGMENTS, ISL, COMP, fromText, evaluate } = window.Sibr;
+  const { SEED, SEGMENTS, PRESETS, ISL, COMP, fromText, evaluate } = window.Sibr;
   const $ = s => document.querySelector(s);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const MARK = { g: "✓", m: "~", b: "✕" };
@@ -170,33 +170,63 @@
   const segCount = r => Object.values(r.lenses).reduce((n, cs) => n + cs.length, 0);
 
   // ---------- Audience picked before the run ----------
-  const ALL_SEGS = Object.values(SEGMENTS).flat().map(s => s.id);
+  // Quick picks set a sensible group in one click; groups below fold away and can be searched.
+  const ALL_SEGS = Object.values(SEGMENTS).flat().map(x => x.id);
+  const PRESET_IDS = Object.fromEntries(PRESETS.map(p => [p.id, p.ids === "all" ? ALL_SEGS : p.ids]));
+  const CORE_QUESTIONS = 22, PER_CALL = 64;
   let aud;
-  try { aud = new Set(JSON.parse(localStorage.getItem("sibrAud") || "null") || ALL_SEGS); } catch { aud = new Set(ALL_SEGS); }
+  try { aud = new Set(JSON.parse(localStorage.getItem("sibrAud") || "null") || PRESET_IDS.core); } catch { aud = new Set(PRESET_IDS.core); }
   aud = new Set(ALL_SEGS.filter(id => aud.has(id)));
-  if (!aud.size) aud = new Set(ALL_SEGS);
-  const audList = () => aud.size === ALL_SEGS.length ? null : ALL_SEGS.filter(id => aud.has(id));
+  if (!aud.size) aud = new Set(PRESET_IDS.core);
+  const openGroups = new Set();
+  let find = "";
+  const audList = () => ALL_SEGS.filter(id => aud.has(id));
+  const samePreset = () => PRESETS.find(p => { const ids = PRESET_IDS[p.id]; return ids.length === aud.size && ids.every(id => aud.has(id)); });
+
   function renderAudience() {
+    const cur = samePreset();
+    $("#audPresets").innerHTML = PRESETS.map(p => `<button type="button" data-p="${p.id}" aria-pressed="${cur === p}">${esc(p.name)} <small>${PRESET_IDS[p.id].length}</small></button>`).join("") +
+      `<button type="button" class="custom" aria-pressed="${!cur}" disabled>Custom</button>`;
+    $("#audPresetHint").textContent = cur ? cur.hint : "Your own mix. Pick a quick pick above to start over.";
+    const q = find.trim().toLowerCase();
     $("#audGroups").innerHTML = Object.entries(SEGMENTS).map(([g, segs]) => {
-      const on = segs.filter(x => aud.has(x.id)).length;
-      return `<div class="audGroup"><button type="button" class="audG" data-g="${esc(g)}" aria-pressed="${on === segs.length}">${esc(g)} <small>${on}/${segs.length}</small></button>
-        <div class="audSegs">${segs.map(x => `<button type="button" class="audS" data-id="${x.id}" aria-pressed="${aud.has(x.id)}">${esc(x.name)}</button>`).join("")}</div></div>`;
-    }).join("");
-    const n = aud.size;
-    $("#audSum").textContent = n === ALL_SEGS.length ? `All ${n} segments` : `${n} of ${ALL_SEGS.length} segments`;
+      const list = q ? segs.filter(x => (x.name + " " + x.who + " " + g).toLowerCase().includes(q)) : segs;
+      if (!list.length) return "";
+      const on = segs.filter(x => aud.has(x.id));
+      const preview = on.length === segs.length ? "all" : on.length ? on.slice(0, 3).map(x => x.name).join(", ") + (on.length > 3 ? ` +${on.length - 3}` : "") : "none";
+      return `<details class="audGroup" data-g="${esc(g)}" ${q || openGroups.has(g) ? "open" : ""}>
+        <summary><b>${esc(g)}</b><span class="cnt${on.length ? " on" : ""}">${on.length}/${segs.length}</span><span class="pv">${esc(preview)}</span>
+          <span class="gAct"><button type="button" data-all="${esc(g)}">All</button><button type="button" data-none="${esc(g)}">None</button></span></summary>
+        <div class="audSegs">${list.map(x => `<button type="button" class="audS" data-id="${x.id}" aria-pressed="${aud.has(x.id)}" title="${esc(x.who)}">${esc(x.name)}</button>`).join("")}</div>
+      </details>`;
+    }).join("") || '<p class="muted">No segment matches that.</p>';
+    const n = aud.size, qn = CORE_QUESTIONS + n, calls = n <= PER_CALL - CORE_QUESTIONS ? 1 : 1 + Math.ceil((n - (PER_CALL - CORE_QUESTIONS)) / PER_CALL);
+    $("#audSum").textContent = n ? `${cur ? cur.name : "Custom"} · ${n} segment${n === 1 ? "" : "s"}` : "None picked";
+    $("#audCost").innerHTML = !n ? '<span class="warn">Pick at least one segment to run.</span>' : `<b>${n}</b> of ${ALL_SEGS.length} segments · Laya asks <b>${qn}</b> questions${calls > 1 ? ` in ${calls} passes (slower)` : ""}`;
     try { localStorage.setItem("sibrAud", JSON.stringify([...aud])); } catch {}
   }
+  $("#audPresets").addEventListener("click", e => {
+    const b = e.target.closest("button[data-p]"); if (!b) return;
+    aud = new Set(PRESET_IDS[b.dataset.p]); renderAudience();
+  });
+  $("#audGroups").addEventListener("toggle", e => {
+    const d = e.target; if (!d.dataset || !d.dataset.g || find) return;
+    d.open ? openGroups.add(d.dataset.g) : openGroups.delete(d.dataset.g);
+  }, true);
   $("#audGroups").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
-    if (b.classList.contains("audS")) {
-      if (aud.has(b.dataset.id)) { if (aud.size > 1) aud.delete(b.dataset.id); } else aud.add(b.dataset.id);
-    } else {
-      const ids = SEGMENTS[b.dataset.g].map(x => x.id), all = ids.every(id => aud.has(id));
-      if (all) { ids.forEach(id => aud.delete(id)); if (!aud.size) ids.forEach(id => aud.add(id)); } else ids.forEach(id => aud.add(id));
+    if (b.dataset.all || b.dataset.none) {
+      e.preventDefault();
+      const ids = SEGMENTS[b.dataset.all || b.dataset.none].map(x => x.id);
+      if (b.dataset.all) ids.forEach(id => aud.add(id));
+      else ids.forEach(id => aud.delete(id));
+    } else if (b.dataset.id) {
+      aud.has(b.dataset.id) ? aud.delete(b.dataset.id) : aud.add(b.dataset.id);
     }
     renderAudience();
   });
-  $("#audAll").addEventListener("click", () => { aud = new Set(ALL_SEGS); renderAudience(); });
+  $("#audFind").addEventListener("input", e => { find = e.target.value; renderAudience(); });
+  $("#audClear").addEventListener("click", () => { aud = new Set(); renderAudience(); });
   renderAudience();
 
   // ---------- Lens map with filters ----------
@@ -363,6 +393,7 @@
     const v = input.value.trim();
     const btn = $("#ideaForm button");
     if (!v || btn.disabled) return;
+    if (!aud.size) { $("#audience").open = true; $("#audience").scrollIntoView({ behavior: "smooth", block: "center" }); return; }
     btn.disabled = true; btn.textContent = engine === "laya" ? "Running Laya…" : "Running…";
     const stop = startProcessing(engine === "laya" ? "laya" : "quick");
     const segs = audList();

@@ -34,10 +34,19 @@
     </div>
   </form>
   <details class="audience" id="audience">
-    <summary><span>Audience</span> <b id="audSum">All 21 segments</b> <small>Choose who to test before you run</small></summary>
+    <summary><span>Audience</span> <b id="audSum">Core 21</b> <small>Choose who to test before you run</small></summary>
     <div class="audBody">
-      <div id="audGroups"></div>
-      <div class="audActions"><button type="button" id="audAll">Select all</button><span class="muted" id="audHint">Fewer segments means a faster, more focused Laya run.</span></div>
+      <div class="audStep">
+        <span class="audLbl">1 · Start from a quick pick</span>
+        <div id="audPresets" class="presets" role="group" aria-label="Quick picks"></div>
+        <p id="audPresetHint" class="muted"></p>
+      </div>
+      <div class="audStep">
+        <span class="audLbl">2 · Fine-tune (optional)</span>
+        <input id="audFind" type="search" placeholder="Find a segment: Canada, sisters, gaming, enterprises…" aria-label="Find a segment">
+        <div id="audGroups"></div>
+      </div>
+      <div class="audActions"><span id="audCost"></span><button type="button" id="audClear">Clear all</button></div>
     </div>
   </details>
   <div class="engine" role="group" aria-label="Engine">
@@ -145,8 +154,9 @@
   <div id="drawerBody"></div>
 </aside>
 
-<footer>Sibr · صبر · patience in building · <a href="https://munazzar.github.io/plotline/#/bench">workbench</a> · <a href="https://github.com/Munazzar/sibr">source</a></footer>
+<footer>Sibr · سبر · to probe an idea to its depth · <a href="https://munazzar.github.io/plotline/#/bench">workbench</a> · <a href="https://github.com/Munazzar/sibr">source</a></footer>
 <script src="config.js"></script>
+<script src="segments.js"></script>
 <script src="engine.js"></script>
 <script src="app.js"></script>
 </body>

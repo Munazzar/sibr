@@ -221,28 +221,45 @@ ul.ev small{display:block;color:var(--mute)}
 
 /* Audience picked before the run */
 .audience{margin-top:14px;max-width:720px;border:1px solid var(--line);border-radius:14px;background:#0a1915}
-.audience summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;padding:12px 16px;font-size:14px}
-.audience summary::-webkit-details-marker{display:none}
-.audience summary::before{content:"▸";color:var(--gold);transition:transform .2s}
-.audience[open] summary::before{transform:rotate(90deg)}
-.audience summary span{color:var(--mute)}
-.audience summary b{color:var(--gold2);font-weight:600}
-.audience summary small{color:var(--mute);margin-left:auto}
-.audBody{padding:2px 16px 14px;display:grid;gap:12px}
-.audGroup{display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:start}
-#audGroups{display:grid;gap:12px}
-.audSegs{display:flex;flex-wrap:wrap;gap:6px}
-.audGroup .audG{justify-self:start}
-.audGroup button{font:500 13px Inter,system-ui,sans-serif;padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--mute);cursor:pointer}
-.audGroup button[aria-pressed="true"]{background:rgba(214,180,106,.14);border-color:rgba(214,180,106,.55);color:var(--ink)}
-.audGroup .audG{font-weight:600;color:var(--gold2);border-style:dashed}
-.audGroup .audG small{opacity:.7;margin-left:2px}
-.audActions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12.5px}
-.audActions button{font:500 13px Inter,system-ui,sans-serif;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--gold2);cursor:pointer}
+.audience>summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;padding:12px 16px;font-size:14px}
+.audience>summary::-webkit-details-marker{display:none}
+.audience>summary::before{content:"";width:0;height:0;border-left:6px solid var(--gold);border-top:4px solid transparent;border-bottom:4px solid transparent;align-self:center;transition:transform .2s}
+.audience[open]>summary::before{transform:rotate(90deg)}
+.audience>summary span{color:var(--mute)}
+.audience>summary b{color:var(--gold2);font-weight:600}
+.audience>summary small{color:var(--mute);margin-left:auto}
+.audBody{padding:4px 16px 16px;display:grid;gap:16px}
+.audStep{display:grid;gap:8px}
+.audLbl{font:600 11px 'JetBrains Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.presets button,.audSegs button,.gAct button,.audActions button{font:500 13px Inter,system-ui,sans-serif;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--mute);cursor:pointer}
+.presets button small{opacity:.6;margin-left:3px;font-size:11px}
+.presets button[aria-pressed="true"],.audSegs button[aria-pressed="true"]{background:rgba(214,180,106,.14);border-color:rgba(214,180,106,.55);color:var(--ink)}
+.presets .custom{cursor:default;border-style:dashed}
+.presets .custom[aria-pressed="false"]{display:none}
+#audPresetHint{margin:0;font-size:12.5px}
+#audFind{width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(7,18,15,.6);color:var(--ink);font:14px Inter,system-ui,sans-serif;outline:none}
+#audFind:focus{border-color:rgba(214,180,106,.55)}
+#audGroups{display:grid;gap:6px}
+.audGroup{border:1px solid rgba(201,169,97,.12);border-radius:12px;background:rgba(7,18,15,.4)}
+.audGroup>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:9px 12px;font-size:13.5px}
+.audGroup>summary::-webkit-details-marker{display:none}
+.audGroup>summary::before{content:"";width:0;height:0;border-left:6px solid var(--gold);border-top:4px solid transparent;border-bottom:4px solid transparent;align-self:center;flex:none;transition:transform .2s}
+.audGroup[open]>summary::before{transform:rotate(90deg)}
+.audGroup .cnt{font:600 11px 'JetBrains Mono',monospace;color:var(--mute);padding:2px 7px;border-radius:999px;border:1px solid var(--line)}
+.audGroup .cnt.on{color:var(--gold2);border-color:rgba(214,180,106,.4)}
+.audGroup .pv{flex:1;min-width:0;color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gAct{display:flex;gap:4px}
+.gAct button{padding:3px 9px;font-size:12px;border-radius:7px}
+.audSegs{display:flex;flex-wrap:wrap;gap:6px;padding:2px 12px 12px}
+.audActions{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:12.5px;color:var(--mute);padding-top:10px;border-top:1px solid rgba(201,169,97,.1)}
+.audActions b{color:var(--ink)}
+.audActions .warn{color:var(--mid)}
+.audActions button{border-radius:8px;font-size:12.5px;padding:5px 11px}
 
 /* What Sibr checks */
 .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
 .pi{display:grid;gap:4px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:rgba(7,18,15,.45)}
 .pi b{color:var(--gold2);font-weight:600}
 .pi span{color:var(--mute);font-size:13.5px;line-height:1.5}
-@media (max-width:600px){.audience summary small{margin-left:0;width:100%}.audGroup{grid-template-columns:1fr}}
+@media (max-width:600px){.audience summary small{margin-left:0;width:100%}.audGroup .pv{display:none}.audGroup>summary b{flex:1}}
