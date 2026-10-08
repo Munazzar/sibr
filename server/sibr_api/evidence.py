@@ -18,6 +18,7 @@ def words(text: str) -> set:
 
 def queries(idea: str, card: Dict[str, str]) -> List[str]:
     # Search in the user's own words; the LLM-made name ("Halal Student Invest") matches unrelated brands.
+    idea = " ".join(idea.split()[:12])  # long, detailed ideas make useless search queries
     solution = card.get("solution") or idea
     return [f"{idea} competitors", f"{idea} reddit", f"{solution} alternatives"]
 
