@@ -43,8 +43,9 @@ def gold_ideas() -> set:
         return {norm(r["idea"]) for r in csv.DictReader(f) if (r.get("idea") or "").strip()}
 
 
-def log_ideas(path: Path = LOGS) -> list:
+def log_ideas(path: Path = None) -> list:
     """Full idea texts from successful evaluations in the request log (oldest first, unique)."""
+    path = path or LOGS  # looked up at call time, so tests and callers can point it elsewhere
     out, seen = [], set()
     if not path.exists():
         return out
@@ -56,7 +57,8 @@ def log_ideas(path: Path = LOGS) -> list:
         if e.get("path") != "/evaluate" or e.get("status") != 200:
             continue
         d = e.get("detail") if isinstance(e.get("detail"), dict) else {}
-        idea = e.get("idea") or d.get("idea")
+        rq = d.get("request") if isinstance(d.get("request"), dict) else {}
+        idea = e.get("idea") or d.get("idea") or rq.get("idea")
         if not idea:  # older entries only kept a note: "idea · extras"; a cut note ends in …
             idea = (e.get("note") or "").split(" · ")[0]
             if idea.endswith("…"):

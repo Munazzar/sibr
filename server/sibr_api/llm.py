@@ -34,6 +34,8 @@ class LLM:
             headers["authorization"] = f"Bearer {self.s.llm_api_key}"
         body = {"model": self.s.llm_model, "temperature": 0.3, "max_tokens": max_tokens,
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        if self.s.llm_reasoning:
+            body["reasoning_effort"] = self.s.llm_reasoning
         try:
             r = self.client.post(f"{self.s.llm_base_url}/chat/completions", json=body, headers=headers)
             r.raise_for_status()

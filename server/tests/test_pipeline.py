@@ -204,7 +204,15 @@ def test_request_log_needs_admin_key():
     assert (denied["status"], denied["via"]) == (401, "this PC")
     assert (ok["status"], ok["via"], ok["ip"]) == (200, "tailscale", "100.64.0.9")
     assert "halal investing app" in ok["note"] and "Sibr" in ok["note"]
-    assert c.get("/logs.json?since=%d" % ok["id"], headers={"x-sibr-admin": "adm1n"}).json()["entries"] == []
+    assert (denied["detail"]["error"], denied["detail"]["request"]["key"]) == ("Missing or wrong access key", "missing")
+    res = ok["detail"]["result"]
+    assert ok["detail"]["request"]["idea"] == "halal investing app" and ok["kind"] == "evaluate"
+    assert isinstance(res["sibr"], int)
+    assert res["steps"] and {"pain", "value"} <= set(res["scores"]) and res["top"]
+    c.post("/evaluate", json={"idea": ""}, headers={"x-sibr-key": "s3cret"})
+    bad = c.get("/logs.json?since=%d" % ok["id"], headers={"x-sibr-admin": "adm1n"}).json()["entries"][-1]
+    assert bad["status"] == 422 and "idea" in bad["detail"]["error"]
+    assert c.get("/logs.json?since=%d" % bad["id"], headers={"x-sibr-admin": "adm1n"}).json()["entries"] == []
     assert "Sibr live logs" in c.get("/logs").text
 
 

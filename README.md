@@ -6,6 +6,8 @@
 
 **How it works:** [docs/how-it-works.pdf](docs/how-it-works.pdf), a full breakdown with diagrams.
 
+**Build board:** [docs/status.html](docs/status.html), what is done, in progress and next.
+
 ## What's in this release
 
 - An animated validation matrix seeded with six ideas.

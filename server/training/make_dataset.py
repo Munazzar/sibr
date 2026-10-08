@@ -3,6 +3,12 @@
     python -m training.make_dataset --n 1000            # generate + label (resumable)
     python -m training.make_dataset --from-review       # rebuild JSONL after editing review.csv
 
+A stronger second teacher (free, local), re-grading the same ideas and then adding more:
+    set SIBR_LLM_MODEL=qwen3:14b & set SIBR_LLM_REASONING=none
+    python -m training.make_dataset --labels labels-qwen3.jsonl --relabel-from labels.jsonl
+    python -m training.make_dataset --labels labels-qwen3.jsonl --n 3000
+review.csv then has a "disagree" column naming the grades where the two teachers differ.
+
 Writes to training/data/:
   labels.jsonl  one row per idea: idea, card and the teacher's labels (resume log)
   review.csv    the same labels as a spreadsheet. Edit any cell you disagree with,
@@ -110,17 +116,26 @@ def write_splits(records, eval_frac: float, seed: int):
 
 
 # seg_ids: the segments the teacher was asked about; "segments" lists the ones it said yes to.
-CSV_COLS = ["keep", "idea", "name", *CARD_FIELDS, *SCORES, "comp", "islamic", "tags", "segments", "seg_ids"]
+# disagree: the grades another teacher gave differently (see --relabel-from); review those first.
+CSV_COLS = ["keep", "idea", "name", *CARD_FIELDS, *SCORES, "comp", "islamic", "tags", "segments", "seg_ids", "disagree"]
+GRADES = [*SCORES, "comp", "islamic"]
 
 
-def write_review(records):
+def read_labels(path: Path):
+    return [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()] if path.exists() else []
+
+
+def write_review(records, other=None):
+    other = {r["idea"].lower(): r["labels"] for r in other or []}
     with open(DATA / "review.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, CSV_COLS)
         w.writeheader()
         for r in records:
-            w.writerow({"keep": 1, "idea": r["idea"], **r["card"], **{k: r["labels"][k] for k in [*SCORES, "comp", "islamic"]},
+            o = other.get(r["idea"].lower())
+            w.writerow({"keep": 1, "idea": r["idea"], **r["card"], **{k: r["labels"][k] for k in GRADES},
                         "tags": " ".join(r["labels"]["tags"]), "segments": " ".join(r["labels"]["segments"]),
-                        "seg_ids": " ".join(r.get("seg_ids") or LEGACY_IDS)})
+                        "seg_ids": " ".join(r.get("seg_ids") or LEGACY_IDS),
+                        "disagree": " ".join(k for k in GRADES if o and o[k] != r["labels"][k])})
 
 
 def read_review():
@@ -144,6 +159,8 @@ def main(argv=None):
     ap.add_argument("--eval-frac", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--from-review", action="store_true", help="rebuild train/eval from an edited review.csv")
+    ap.add_argument("--labels", default="labels.jsonl", help="labels file in training/data (resume log)")
+    ap.add_argument("--relabel-from", default="", help="re-grade the ideas in this labels file with the current teacher")
     a = ap.parse_args(argv)
     DATA.mkdir(parents=True, exist_ok=True)
 
@@ -155,9 +172,27 @@ def main(argv=None):
     llm = LLM(Settings())
     if not llm.enabled:
         raise SystemExit("Set SIBR_LLM_PROVIDER to a working LLM (Ollama by default).")
-    log = DATA / "labels.jsonl"
-    records = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines() if l.strip()] if log.exists() else []
+    log = DATA / a.labels
+    records = read_labels(log)
     have = {r["idea"].lower() for r in records}
+    first = read_labels(DATA / a.relabel_from) if a.relabel_from else []
+    if first:
+        todo = [r for r in first if r["idea"].lower() not in have]
+        print(f"re-grading {len(todo)} of {len(first)} ideas from {a.relabel_from}, teacher {llm.describe()}")
+        with open(log, "a", encoding="utf-8") as f:
+            for i, r in enumerate(todo, 1):
+                parsed = clean(llm.chat_json(label_prompt(r["seg_ids"]), f"Idea: {r['idea']}", max_tokens=600) or {})
+                if parsed is not None:
+                    parsed[1]["segments"] = [s for s in parsed[1]["segments"] if s in r["seg_ids"]]
+                    rec = {"idea": r["idea"], "card": parsed[0], "labels": parsed[1], "seg_ids": r["seg_ids"]}
+                    records.append(rec)
+                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                    f.flush()
+                if i % 25 == 0:
+                    print(f"  {i}/{len(todo)}")
+        write_review(records, first)
+        write_splits(records, a.eval_frac, a.seed)
+        return
     rng = random.Random(a.seed + len(records))
     print(f"{len(records)} already labelled, target {a.n}, teacher {llm.describe()}")
     with open(log, "a", encoding="utf-8") as f:
@@ -177,7 +212,7 @@ def main(argv=None):
                 f.flush()
                 if len(records) % 25 == 0:
                     print(f"  {len(records)}/{a.n}")
-    write_review(records)
+    write_review(records, read_labels(DATA / "labels.jsonl") if a.labels != "labels.jsonl" else None)
     write_splits(records, a.eval_frac, a.seed)
 
 

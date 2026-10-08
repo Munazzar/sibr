@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, Field
@@ -27,6 +29,29 @@ SITE = Path(__file__).resolve().parents[2]
 # Only these files are served, so nothing else in the repo (like server/.env) is reachable.
 SITE_FILES = {"index.html", "app.js", "engine.js", "segments.js", "styles.css"}
 LOGS_PAGE = Path(__file__).with_name("logs.html")
+
+
+def _kind(method: str, path: str) -> str:
+    if method == "OPTIONS":
+        return "preflight"
+    if path in ("/evaluate", "/health"):
+        return path[1:]
+    if path.startswith("/logs"):
+        return "logs"
+    return "page"
+
+
+def _result_summary(out: dict) -> dict:
+    """What the log keeps from an evaluation: enough to see what happened, not the whole report."""
+    meta = out.get("meta") or {}
+    return {"sibr": out.get("sibr"), "islamic": (out.get("isl") or {}).get("label"),
+            "competition": (out.get("comp") or {}).get("label"), "name": (out.get("idea") or {}).get("name"),
+            "summary": (out.get("idea") or {}).get("summary"),
+            "top": [{"name": c.get("name"), "fit": round(float(c.get("fit", 0)), 2)} for c in (out.get("top") or [])],
+            "scores": {k: v.get("value") for k, v in (out.get("verdicts") or {}).items()},
+            "steps": meta.get("steps"), "evidence": len(out.get("evidence") or []),
+            "laya_model": meta.get("laya_model"), "llm": (meta.get("llm") or {}).get("model"),
+            "llm_error": meta.get("llm_error"), "audiences": len(meta.get("segments") or [])}
 
 
 class EvaluateIn(BaseModel):
@@ -68,6 +93,7 @@ def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:
         if request.url.path == "/logs.json":  # the log page polling itself is noise
             return await call_next(request)
         t, status = time.perf_counter(), 500
+        resp = None
         try:
             resp = await call_next(request)
             status = resp.status_code
@@ -76,16 +102,29 @@ def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:
             seq[0] += 1
             h = request.headers
             fwd = h.get("x-forwarded-for", "")
+            st = request.state
             entry = {"id": seq[0], "time": datetime.now().isoformat(timespec="seconds"), "method": request.method,
-                     "path": request.url.path, "status": status, "ms": round((time.perf_counter() - t) * 1000),
+                     "path": request.url.path, "kind": _kind(request.method, request.url.path),
+                     "status": status, "ms": round((time.perf_counter() - t) * 1000),
                      "ip": fwd.split(",")[0].strip() or (request.client.host if request.client else ""),
                      "who": h.get("tailscale-user-login") or h.get("tailscale-user-name") or "",
-                     "via": "tailscale" if fwd else "this PC", "note": getattr(request.state, "note", "")}
+                     "name": h.get("tailscale-user-name") or "",
+                     "via": "tailscale" if fwd else "this PC", "note": getattr(st, "note", ""),
+                     "detail": {"ua": h.get("user-agent", ""), "origin": h.get("origin") or h.get("referer") or "",
+                                "query": request.url.query, "req_bytes": int(h.get("content-length") or 0),
+                                "resp_bytes": int(resp.headers.get("content-length") or 0) if resp else 0,
+                                "error": getattr(st, "error", ""), "request": getattr(st, "request", None),
+                                "result": getattr(st, "result", None)}}
             recent.append(entry)
             if log_path:
                 log_path.parent.mkdir(exist_ok=True)
                 with log_path.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(entry) + "\n")
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_input(request: Request, exc: RequestValidationError):
+        request.state.error = "; ".join(f"{'.'.join(map(str, e.get('loc', [])[1:]))}: {e.get('msg')}" for e in exc.errors())
+        return await request_validation_exception_handler(request, exc)
 
     def admin_ok(key: Optional[str]) -> bool:
         return bool(settings.admin_key) and hmac.compare_digest(key or "", settings.admin_key)
@@ -111,14 +150,26 @@ def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:
         request.state.note = (idea[:100] + "…" if len(idea) > 100 else idea) + (
             f" · {len(body.segments)} segments" if body.segments else "") + (
             " · open audience" if body.open_audience else "") + (f" · {len(body.custom)} custom" if body.custom else "")
+        request.state.request = {"idea": body.idea, "chars": len(body.idea),
+                                 "mode": "open" if body.open_audience else "picked" if body.segments else
+                                 "custom" if body.custom else "default (core 21)",
+                                 "segments": body.segments or [], "custom": body.custom or [],
+                                 "key": "ok" if settings.api_key else "not required"}
         if settings.api_key and not hmac.compare_digest(x_sibr_key or "", settings.api_key):
-            raise HTTPException(401, "Missing or wrong access key")
+            request.state.request["key"] = "missing" if not x_sibr_key else "wrong"
+            request.state.error = "Missing or wrong access key"
+            raise HTTPException(401, request.state.error)
         try:
             out = pipeline.evaluate(body.idea, body.segments, body.open_audience, body.custom)
-            request.state.note += f" · Sibr {out.get('sibr')}"
-            return out
         except LayaUnavailable as e:
-            raise HTTPException(503, f"Laya is unavailable: {e}")
+            request.state.error = f"Laya is unavailable: {e}"
+            raise HTTPException(503, request.state.error)
+        except Exception as e:
+            request.state.error = f"{type(e).__name__}: {e}"
+            raise
+        request.state.note += f" · Sibr {out.get('sibr')}"
+        request.state.result = _result_summary(out)
+        return out
 
     if settings.serve_site:
         @app.get("/config.js")
