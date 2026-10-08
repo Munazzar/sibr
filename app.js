@@ -70,8 +70,23 @@
   $("#closeDrawer").addEventListener("click", () => { $("#drawer").classList.remove("open"); $("#drawer").setAttribute("aria-hidden", "true"); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") $("#closeDrawer").click(); });
 
-  async function remote(text) {
-    const res = await fetch(API + "/evaluate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ idea: text }) });
+  // Access key for a service started with SIBR_API_KEY: from ?key= once, then remembered on this device.
+  const store = { get: () => { try { return localStorage.getItem("sibrKey") || ""; } catch { return ""; } },
+                  set: v => { try { localStorage.setItem("sibrKey", v); } catch {} } };
+  const urlKey = new URLSearchParams(location.search).get("key");
+  if (urlKey) {
+    store.set(urlKey);
+    const u = new URL(location.href); u.searchParams.delete("key"); history.replaceState(null, "", u);
+  }
+
+  async function remote(text, retry = true) {
+    const headers = { "content-type": "application/json" };
+    if (store.get()) headers["x-sibr-key"] = store.get();
+    const res = await fetch(API + "/evaluate", { method: "POST", headers, body: JSON.stringify({ idea: text }) });
+    if (res.status === 401 && retry) {
+      const k = prompt("Sibr access key");
+      if (k) { store.set(k.trim()); return remote(text, false); }
+    }
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "HTTP " + res.status);
     return res.json();
   }

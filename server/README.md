@@ -19,7 +19,15 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1
 ```
 
-`setup.ps1` builds `server\.venv`, installs everything, pulls `llama3.2:3b` and downloads the Laya checkpoint. `start.ps1` runs the service and the site and opens `http://localhost:8080/?api=http://localhost:8787`.
+`setup.ps1` builds `server\.venv`, installs everything, generates an access key in `server\.env`, pulls `llama3.2:3b` and downloads the Laya checkpoint. `start.ps1` runs the service, which also serves the site, on `http://localhost:8787/` and listens on this computer only.
+
+## Use it from your other devices (Tailscale)
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\tailscale.ps1
+```
+
+This runs `tailscale serve --bg 8787`, which gives Sibr an HTTPS address on your tailnet (`https://<pc-name>.<tailnet>.ts.net`). Only devices signed in to your Tailscale account can reach it; nothing is opened on your router or to the public internet. Open the address once with `?key=<SIBR_API_KEY>` (or type the key when asked) and the browser remembers it. `tailscale serve reset` stops sharing. Don't use `tailscale funnel`, which would make it public.
 
 ## Run locally (any OS)
 
@@ -29,19 +37,13 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt          # includes laya, torch, transformers
 cp .env.example .env                     # then edit; the service reads server/.env
 ollama pull llama3.2:3b                  # free local LLM
-uvicorn sibr_api.app:app --port 8787
+uvicorn sibr_api.app:app --host 127.0.0.1 --port 8787
+# open http://localhost:8787/  (the service serves the site too)
 ```
 
 The first request downloads the Laya checkpoint (about 421M parameters) from Hugging Face.
 
-Then serve the site and point it at the service:
-
-```
-cd .. && python3 -m http.server 8080
-# open http://localhost:8080/?api=http://localhost:8787
-```
-
-Or set `window.SIBR_API` in `../config.js`.
+To use the GitHub Pages copy of the site instead, open it with `?api=http://localhost:8787` or set `window.SIBR_API` in `../config.js`.
 
 ## Configuration
 
@@ -56,6 +58,8 @@ Or set `window.SIBR_API` in `../config.js`.
 | `SIBR_EVIDENCE` | `ddg` | `off` skips the web search. |
 | `SIBR_EVIDENCE_RESULTS` | `3` | Results per search (three searches per idea). |
 | `SIBR_LAYA_MIN_CONFIDENCE` | `0.5` | Cells below this get `escalate: true`. |
+| `SIBR_API_KEY` | unset | When set, `/evaluate` needs it in the `X-Sibr-Key` header. |
+| `SIBR_SERVE_SITE` | `1` | Serve the site from the service (only `index.html`, `app.js`, `engine.js`, `styles.css` and a generated `config.js`). |
 | `SIBR_CORS_ORIGINS` | GitHub Pages + localhost | Comma-separated. |
 
 ## Fine-tuning Laya for Sibr

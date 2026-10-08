@@ -52,6 +52,11 @@ class Settings:
     evidence: str = field(default_factory=lambda: os.getenv("SIBR_EVIDENCE", "ddg"))
     evidence_results: int = field(default_factory=lambda: int(os.getenv("SIBR_EVIDENCE_RESULTS", "3")))
 
+    # When set, /evaluate requires this key in the X-Sibr-Key header.
+    api_key: str = field(default_factory=lambda: os.getenv("SIBR_API_KEY", ""))
+    # Serve the site from this service too (one port, same origin; what `tailscale serve` exposes).
+    serve_site: bool = field(default_factory=lambda: os.getenv("SIBR_SERVE_SITE", "1") != "0")
+
     cors_origins: str = field(default_factory=lambda: os.getenv(
         "SIBR_CORS_ORIGINS", "https://munazzar.github.io,http://localhost:8080,http://127.0.0.1:8080"))
 

@@ -35,4 +35,4 @@ The site is static with no build step. Open `index.html` directly, or serve the 
 python3 -m http.server 8080
 ```
 
-On Windows, `scripts\setup.ps1` then `scripts\start.ps1` runs everything locally for free. Otherwise see [`server/README.md`](server/README.md), then open `http://localhost:8080/?api=http://localhost:8787`.
+On Windows, `scripts\setup.ps1` then `scripts\start.ps1` runs everything locally for free at `http://localhost:8787/`, and `scripts\tailscale.ps1` shares it privately with your other devices. Otherwise see [`server/README.md`](server/README.md).

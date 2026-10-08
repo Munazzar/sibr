@@ -17,6 +17,12 @@ if (-not (Test-Path $py)) {
 
 $envFile = Join-Path $server ".env"
 if (-not (Test-Path $envFile)) { Copy-Item (Join-Path $server ".env.example") $envFile }
+# A random access key, so only people who have it can run evaluations.
+if (-not (Select-String -Path $envFile -Pattern '^SIBR_API_KEY=.+' -Quiet)) {
+    $key = -join ((48..57) + (97..122) | Get-Random -Count 24 | ForEach-Object { [char]$_ })
+    Add-Content $envFile "`nSIBR_API_KEY=$key"
+    Write-Host "Access key written to server\.env: $key"
+}
 
 Write-Host "== Ollama (free local LLM)"
 if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {
@@ -29,3 +35,4 @@ Write-Host "== Laya checkpoint (first download is about 1.7 GB)"
 & $py -c "from laya import Router; r = Router(); print(r.predict('test idea', {'q': {'type': 'noul', 'instructions': 'Is this a test?'}}, model='english')['answers'])"
 
 Write-Host "Setup done. Start Sibr with: powershell -ExecutionPolicy Bypass -File scripts\start.ps1"
+Write-Host "To use it from your other devices: powershell -ExecutionPolicy Bypass -File scripts\tailscale.ps1"

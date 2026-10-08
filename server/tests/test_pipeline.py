@@ -112,3 +112,16 @@ def test_api_routes():
     assert c.post("/evaluate", json={"idea": ""}).status_code == 422
     down = TestClient(create_app(Pipeline(FakeLaya(fail=True), llm_with(good_llm)), Settings(llm_provider="ollama")))
     assert down.post("/evaluate", json={"idea": "halal investing app"}).status_code == 503
+
+
+def test_access_key_and_site_serving():
+    s = Settings(llm_provider="ollama", api_key="s3cret")
+    c = TestClient(create_app(Pipeline(FakeLaya(), llm_with(good_llm)), s))
+    assert c.post("/evaluate", json={"idea": "halal investing app"}).status_code == 401
+    assert c.post("/evaluate", json={"idea": "halal investing app"}, headers={"x-sibr-key": "nope"}).status_code == 401
+    assert c.post("/evaluate", json={"idea": "halal investing app"}, headers={"x-sibr-key": "s3cret"}).status_code == 200
+    assert "Sibr" in c.get("/").text
+    assert "location.origin" in c.get("/config.js").text
+    assert c.get("/app.js").status_code == 200
+    for blocked in ("/README.md", "/.env", "/server/.env", "/..%2Fserver%2F.env"):
+        assert c.get(blocked).status_code == 404, blocked
