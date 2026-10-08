@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sibr live logs</title>
+<style>
+:root{--bg:#07120f;--card:#0d1f1a;--ink:#e8efe9;--mute:#8fa39b;--line:#1f3a32;--gold:#d6b46a;--ok:#5fc48b;--warn:#e0b04f;--bad:#e06a5f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px}
+h1{font-size:20px;margin:0 0 4px}
+.top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.mute{color:var(--mute);font-size:13px}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.stat b{display:block;font-size:18px}
+input,select,button{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit}
+button{cursor:pointer}
+.wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;background:var(--bg)}
+td.note{max-width:420px;word-break:break-word}
+.s2{color:var(--ok)}.s4{color:var(--warn)}.s5{color:var(--bad)}
+tr.new{animation:flash 1.2s ease-out}
+@keyframes flash{from{background:rgba(214,180,106,.25)}to{background:transparent}}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px}
+.dot.off{background:var(--bad)}
+#login{max-width:420px;margin:40px auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+#login input{width:100%;margin:8px 0}
+</style></head>
+<body>
+<div id="login" hidden>
+  <h1>Sibr live logs</h1>
+  <p class="mute">Enter the admin key (SIBR_ADMIN_KEY in sibr\server\.env, also in your Sibr guide).</p>
+  <input id="key" type="password" placeholder="Admin key" autocomplete="off">
+  <button id="save">Open logs</button>
+  <p id="err" class="mute"></p>
+</div>
+<main id="main" hidden>
+  <div class="top">
+    <div><h1>Sibr live logs</h1><div class="mute"><span id="dot" class="dot"></span><span id="status">Connecting…</span></div></div>
+    <div>
+      <select id="filter"><option value="">All requests</option><option value="/evaluate">Evaluations only</option><option value="tailscale">Via Tailscale only</option><option value="err">Errors (4xx/5xx)</option></select>
+      <button id="pause">Pause</button>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><b id="nTotal">0</b><span class="mute">requests</span></div>
+    <div class="stat"><b id="nEval">0</b><span class="mute">evaluations</span></div>
+    <div class="stat"><b id="nTs">0</b><span class="mute">via Tailscale</span></div>
+    <div class="stat"><b id="nErr">0</b><span class="mute">errors / denied</span></div>
+    <div class="stat"><b id="avg">–</b><span class="mute">avg evaluation</span></div>
+  </div>
+  <div class="wrap"><table>
+    <thead><tr><th>Time</th><th>From</th><th>Request</th><th>Status</th><th>Took</th><th>Details</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+let key = "", since = 0, paused = false, all = [];
+try {
+  const q = new URLSearchParams(location.search).get("admin");
+  if (q) { localStorage.setItem("sibrAdmin", q); history.replaceState(null, "", location.pathname); }
+  key = localStorage.getItem("sibrAdmin") || "";
+} catch (e) {}
+
+function why(s) {
+  return s === 401 ? "denied: wrong or missing key" : s === 422 ? "rejected: bad input" : s === 503 ? "Laya unavailable" : s >= 500 ? "server error" : "";
+}
+function row(e, fresh) {
+  const cls = "s" + String(e.status)[0];
+  const from = e.via === "tailscale" ? `${esc(e.who || e.ip)}<div class="mute">Tailscale</div>` : `this PC<div class="mute">${esc(e.ip)}</div>`;
+  const took = e.ms >= 1000 ? (e.ms / 1000).toFixed(1) + " s" : e.ms + " ms";
+  return `<tr class="${fresh ? "new" : ""}"><td>${esc(e.time.replace("T", " "))}</td><td>${from}</td><td>${esc(e.method)} ${esc(e.path)}</td>` +
+    `<td class="${cls}">${e.status}</td><td>${took}</td><td class="note">${esc([why(e.status), e.note].filter(Boolean).join(" · "))}</td></tr>`;
+}
+function keep(e) {
+  const f = $("#filter").value;
+  return !f || (f === "err" ? e.status >= 400 : f === "tailscale" ? e.via === "tailscale" : e.path === f);
+}
+function render(freshFrom) {
+  const list = all.filter(keep).slice(-300).reverse();
+  $("#rows").innerHTML = list.map(e => row(e, e.id > freshFrom)).join("") || `<tr><td colspan="6" class="mute">No requests yet.</td></tr>`;
+  const ev = all.filter(e => e.path === "/evaluate" && e.status === 200);
+  $("#nTotal").textContent = all.length;
+  $("#nEval").textContent = all.filter(e => e.path === "/evaluate").length;
+  $("#nTs").textContent = all.filter(e => e.via === "tailscale").length;
+  $("#nErr").textContent = all.filter(e => e.status >= 400).length;
+  $("#avg").textContent = ev.length ? (ev.reduce((a, e) => a + e.ms, 0) / ev.length / 1000).toFixed(1) + " s" : "–";
+}
+async function poll() {
+  if (!paused) {
+    try {
+      const r = await fetch("/logs.json?since=" + since, {headers: {"X-Sibr-Admin": key}});
+      if (r.status === 401) { showLogin("That admin key didn't work."); return; }
+      const d = await r.json();
+      if (d.entries.length) {
+        const prev = since;
+        all = all.concat(d.entries).slice(-500);
+        since = all[all.length - 1].id;
+        render(prev ? prev : Infinity);
+      } else if (!since) render(Infinity);
+      $("#dot").className = "dot"; $("#status").textContent = "Live · updated " + new Date().toLocaleTimeString();
+    } catch (e) { $("#dot").className = "dot off"; $("#status").textContent = "Can't reach Sibr; retrying…"; }
+  }
+  setTimeout(poll, 2000);
+}
+function showLogin(msg) {
+  $("#main").hidden = true; $("#login").hidden = false; $("#err").textContent = msg || "";
+}
+$("#save").onclick = () => {
+  key = $("#key").value.trim();
+  try { localStorage.setItem("sibrAdmin", key); } catch (e) {}
+  $("#login").hidden = true; $("#main").hidden = false; since = 0; all = []; poll();
+};
+$("#key").addEventListener("keydown", e => { if (e.key === "Enter") $("#save").click(); });
+$("#filter").onchange = () => render(Infinity);
+$("#pause").onclick = () => { paused = !paused; $("#pause").textContent = paused ? "Resume" : "Pause"; };
+if (key) { $("#main").hidden = false; poll(); } else showLogin();
+</script>
+</body></html>

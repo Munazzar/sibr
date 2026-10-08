@@ -167,3 +167,19 @@ def test_api_passes_segments():
     assert [k for k in laya.calls[0][1] if k.startswith("seg_")] == ["seg_us"]
     client.post("/evaluate", json={"idea": "halal investing app"})
     assert sum(k.startswith("seg_") for k in laya.calls[1][1]) == 21
+
+
+def test_request_log_needs_admin_key():
+    s = Settings(llm_provider="ollama", api_key="s3cret", admin_key="adm1n")
+    c = TestClient(create_app(Pipeline(FakeLaya(), llm_with(good_llm)), s))
+    c.post("/evaluate", json={"idea": "halal investing app"})
+    c.post("/evaluate", json={"idea": "halal investing app"}, headers={"x-sibr-key": "s3cret", "x-forwarded-for": "100.64.0.9"})
+    assert c.get("/logs.json").status_code == 401
+    assert c.get("/logs.json", headers={"x-sibr-admin": "s3cret"}).status_code == 401  # the peer key is not enough
+    entries = c.get("/logs.json", headers={"x-sibr-admin": "adm1n"}).json()["entries"]
+    denied, ok = [e for e in entries if e["path"] == "/evaluate"]
+    assert (denied["status"], denied["via"]) == (401, "this PC")
+    assert (ok["status"], ok["via"], ok["ip"]) == (200, "tailscale", "100.64.0.9")
+    assert "halal investing app" in ok["note"] and "Sibr" in ok["note"]
+    assert c.get("/logs.json?since=%d" % ok["id"], headers={"x-sibr-admin": "adm1n"}).json()["entries"] == []
+    assert "Sibr live logs" in c.get("/logs").text
