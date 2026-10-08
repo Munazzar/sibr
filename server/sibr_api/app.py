@@ -25,7 +25,7 @@ SITE_FILES = {"index.html", "app.js", "engine.js", "styles.css"}
 
 
 class EvaluateIn(BaseModel):
-    idea: str = Field(min_length=3, max_length=500)
+    idea: str = Field(min_length=3, max_length=5000)
 
 
 def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:

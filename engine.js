@@ -100,8 +100,19 @@
     const niche = tags.includes("faith") || tags.includes("finance");
     const r = hash(text);
     const isl = islamic(text);
+    const title = text.length > 90 ? text.slice(0, 88).replace(/\s+\S*$/, "") + "…" : text;
+    const has = t => tags.includes(t);
+    const reasons = {
+      pain: has("b2b") || has("finance") ? "Business and money problems usually come with a real, paid pain." : "No strong pain words found; rated by a default rule.",
+      value: has("b2b") || niche ? "Businesses and faith or finance niches tend to pay for solutions." : "Consumer idea without a clear paying niche, so value is rated mixed.",
+      target: `${tags.length} theme${tags.length === 1 ? "" : "s"} detected (${tags.join(", ")}). Fewer themes means a sharper target.`,
+      growth: has("ai") || niche ? "AI and faith-based or halal finance markets are growing fast." : "No fast-growth theme detected; rated by a default rule.",
+      islamic: isl.notes.length ? "Keyword flags: " + isl.notes.join("; ") + "." : "No riba, gambling, haram-category or speculation keywords found.",
+      comp: crowded >= 1 && !niche ? "Themes like social, video, remote work or food are crowded markets." : niche ? "Faith and halal finance niches have fewer direct competitors." : "Competitors likely exist; a clear differentiator is assumed."
+    };
     return {
-      name: text.charAt(0).toUpperCase() + text.slice(1),
+      name: title.charAt(0).toUpperCase() + title.slice(1),
+      text, reasons,
       note: "Custom idea · " + tags.join(", "),
       pain: tags.includes("b2b") || tags.includes("finance") ? "g" : r > .5 ? "m" : "g",
       value: tags.includes("b2b") || niche ? "g" : "m",

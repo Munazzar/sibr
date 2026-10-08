@@ -10,6 +10,7 @@
 
 The response matches the shape `Sibr.evaluate` returns in ../engine.js, so the
 existing UI renders it unchanged, plus an `evidence` list of links."""
+import time
 from typing import Any, Dict, List, Optional
 
 from .evidence import Evidence, digest
@@ -43,6 +44,9 @@ ISL_Q = {"type": "choice", "instructions": "Is this business permissible under I
                       "bad": "involves gambling, alcohol or other clearly prohibited elements"}}
 
 CARD_FIELDS = ["problem", "user", "solution", "revenue", "delivery"]
+# The English Laya checkpoint reads about 512 tokens. A long idea is summarised by the idea
+# card, so Laya gets the card plus the start of the original text.
+LAYA_IDEA_CHARS = 1200
 
 
 def _level(x: float) -> str:
@@ -103,14 +107,33 @@ class Pipeline:
 
     def evaluate(self, text: str) -> Dict[str, Any]:
         text = text.strip()
+        steps: List[Dict[str, Any]] = []
+
+        def step(name: str, t0: float, ok: bool, detail: str):
+            steps.append({"step": name, "ms": round((time.perf_counter() - t0) * 1000), "ok": ok, "detail": detail})
+
+        t = time.perf_counter()
         card = self.idea_card(text)
-        state = {"idea": text, **{k: v for k, v in card.items() if v}}
+        ok = self.llm.enabled and self.llm.last_error is None
+        step("Idea card", t, ok, f"{self.llm.describe()['model']} wrote the card" if ok else
+             f"LLM unavailable ({self.llm.last_error or 'off'}); used your text as is")
+
+        t = time.perf_counter()
         ev_items = self.evidence.pull(text, card)
         ev = digest(ev_items)
+        step("Web evidence", t, bool(ev_items) or self.evidence.mode == "off",
+             "off" if self.evidence.mode == "off" else f"{len(ev_items)} relevant results from 3 DuckDuckGo searches")
+
+        short = text if len(text) <= LAYA_IDEA_CHARS else text[:LAYA_IDEA_CHARS] + "…"
+        state = {"idea": short, **{k: v for k, v in card.items() if v}}
         if ev:
             state["evidence"] = ev
+        t = time.perf_counter()
         res = self.laya.predict(state, QUESTIONS)  # raises LayaUnavailable
         a = res.get("answers", {})
+        laya_model = (res.get("routing") or {}).get("model") or res.get("model")
+        step("Laya verdicts", t, True, f"{len(QUESTIONS)} typed questions in one pass on the {laya_model} checkpoint" +
+             ("" if len(text) <= LAYA_IDEA_CHARS else f"; long idea trimmed to {LAYA_IDEA_CHARS} characters plus the card"))
 
         dims = {k: float(a[k]["score"]) / (len(SCORES[k][1]) - 1) for k in SCORES}
         comp_key = a["comp"]["choice"]
@@ -137,7 +160,11 @@ class Pipeline:
                                       "why": self._why(float(ans["noul"]), m, comp_key)})
         cells = [{**c, "group": g} for g, cs in lenses.items() for c in cs]
 
+        t = time.perf_counter()
         p = self.persona(text, card, cells, ev)
+        ok = bool(p) and self.llm.last_error is None
+        step("Persona pass", t, ok, f"{self.llm.describe()['model']} wrote a line per segment and the verdict" if ok
+             else f"skipped ({self.llm.last_error or 'LLM off or unreadable reply'}); template reasons shown")
         lines = p.get("cells") if isinstance(p.get("cells"), dict) else {}
         for c in [c for cs in lenses.values() for c in cs]:
             if isinstance(lines.get(c["id"]), str):
@@ -148,13 +175,16 @@ class Pipeline:
                 **{k: _level(v) for k, v in dims.items()}, "islamic": isl_key, "comp": comp_key,
                 "islamicNotes": isl_notes, "tags": tags, "card": card, "custom": True,
                 "summary": p.get("summary") if isinstance(p.get("summary"), str) else None}
-        verdicts = {k: {"value": round(v, 3), "confidence": _conf(a[k])} for k, v in dims.items()}
-        verdicts["comp"] = {"value": comp_key, "confidence": _conf(a["comp"])}
-        verdicts["islamic"] = {"value": laya_isl, "confidence": _conf(a["islamic"])}
+        verdicts = {k: {"value": round(v, 3), "score": a[k]["score"], "levels": SCORES[k][1],
+                        "probabilities": a[k].get("probabilities"), "confidence": _conf(a[k])} for k, v in dims.items()}
+        verdicts["comp"] = {"value": comp_key, "labels": COMP_Q["criteria"],
+                            "probabilities": a["comp"].get("probabilities"), "confidence": _conf(a["comp"])}
+        verdicts["islamic"] = {"value": laya_isl, "labels": ISL_Q["criteria"], "keyword": kw_level,
+                               "probabilities": a["islamic"].get("probabilities"), "confidence": _conf(a["islamic"])}
         return {"idea": idea, "sibr": sibr, "isl": isl, "comp": comp, "lenses": lenses, "top": top,
                 "verdicts": verdicts, "evidence": ev_items,
-                "meta": {"engine": "laya", "laya_model": (res.get("routing") or {}).get("model") or res.get("model"),
-                         "llm": self.llm.describe(), "llm_used": self.llm.last_error is None and self.llm.enabled,
+                "meta": {"engine": "laya", "laya_model": laya_model, "steps": steps,
+                         "llm": self.llm.describe(), "llm_used": any(s["ok"] for s in steps if s["step"] in ("Idea card", "Persona pass")),
                          "llm_error": self.llm.last_error}}
 
     @staticmethod
