@@ -135,3 +135,16 @@ def test_public_site_preflight_allows_private_network():
     assert r.status_code == 200
     assert r.headers["access-control-allow-origin"] == "https://munazzar.github.io"
     assert r.headers.get("access-control-allow-private-network") == "true"
+
+
+def test_long_idea_is_trimmed_for_laya_and_steps_are_reported():
+    laya = FakeLaya()
+    long_idea = "halal investing app for students " * 100
+    r = Pipeline(laya, llm_with(good_llm)).evaluate(long_idea)
+    assert len(laya.calls[0][0]["idea"]) <= 1201
+    names = [s["step"] for s in r["meta"]["steps"]]
+    assert names == ["Idea card", "Web evidence", "Laya verdicts", "Persona pass"]
+    assert all(s["ok"] for s in r["meta"]["steps"])
+    assert "trimmed" in r["meta"]["steps"][2]["detail"]
+    c = TestClient(create_app(Pipeline(FakeLaya(), llm_with(good_llm)), Settings(llm_provider="ollama")))
+    assert c.post("/evaluate", json={"idea": "x" * 4000}).status_code == 200

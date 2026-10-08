@@ -25,7 +25,10 @@
   <h1>Test an idea against <em>every lens</em>, not just your own.</h1>
   <p class="lede">Sibr scores each idea on pain, value, target, growth, Islamic alignment and competition — then breaks it down across geographies, age groups, communities and interests to show <strong>where it actually wins</strong>.</p>
   <form id="ideaForm" class="ideaForm" autocomplete="off">
-    <input id="ideaInput" type="text" placeholder="Describe an idea… e.g. halal investing app for students" maxlength="140" aria-label="Business idea">
+    <div class="ideaBox">
+      <textarea id="ideaInput" rows="2" maxlength="5000" placeholder="Describe your idea in as much detail as you like: the problem, who it's for, how it works, how it makes money… e.g. halal investing app for students" aria-label="Business idea"></textarea>
+      <small class="ideaMeta"><span id="ideaCount">0 / 5000</span> · Ctrl+Enter to run</small>
+    </div>
     <button type="submit">Run lenses <span aria-hidden="true">→</span></button>
   </form>
   <div class="engine" role="group" aria-label="Engine">
@@ -43,13 +46,23 @@
       </form>
     </details>
   </div>
+  <div id="processing" class="processing" hidden aria-live="polite"></div>
 </header>
 
 <main>
   <section class="panel" aria-labelledby="mxTitle">
     <div class="panelHead">
       <h2 id="mxTitle">Validation matrix</h2>
-      <span class="hint">Click a row to open its lens map</span>
+      <span class="hint">Click a row to open its report · <span id="fCount"></span></span>
+    </div>
+    <div class="filters" role="search" aria-label="Filter ideas">
+      <input id="fSearch" type="search" placeholder="Search ideas" aria-label="Search ideas">
+      <label class="range">Min Sibr <input id="fMin" type="range" min="0" max="100" step="5" value="0"><b id="fMinV">0</b></label>
+      <select id="fIsl" aria-label="Islamic alignment"><option value="">Islamic: all</option><option value="ok">YES</option><option value="cond">YES*</option><option value="review">REVIEW</option><option value="bad">FLAG</option></select>
+      <select id="fComp" aria-label="Competition"><option value="">Competition: all</option><option value="open">OPEN</option><option value="diff">DIFF</option><option value="sat">CROWDED</option></select>
+      <select id="fEng" aria-label="Engine"><option value="">Engine: all</option><option value="laya">Laya</option><option value="quick">Quick</option></select>
+      <select id="fSort" aria-label="Sort"><option value="new">Newest first</option><option value="high">Sibr: high to low</option><option value="low">Sibr: low to high</option><option value="name">Name A–Z</option></select>
+      <button type="button" id="fReset">Reset</button>
     </div>
     <div class="tableWrap">
       <table id="matrix">
@@ -61,10 +74,29 @@
     </div>
   </section>
 
+  <section class="panel" id="reportPanel" aria-labelledby="reportTitle">
+    <div class="panelHead">
+      <h2 id="reportTitle">Result report</h2>
+      <span class="hint" id="reportIdea"></span>
+    </div>
+    <div id="summary" class="summary"></div>
+    <div id="params" class="params"></div>
+    <details class="behind">
+      <summary>Behind the scenes</summary>
+      <div id="traceBody"></div>
+    </details>
+  </section>
+
   <section class="panel" id="lensPanel" aria-labelledby="lensTitle">
     <div class="panelHead">
       <h2 id="lensTitle">Lens map</h2>
-      <span class="hint" id="lensIdea"></span>
+      <span class="hint"><span id="lensIdea"></span> · <span id="lCount"></span></span>
+    </div>
+    <div class="filters">
+      <div class="chips" id="lGroups" role="group" aria-label="Lens group"></div>
+      <label class="range">Min fit <input id="lMin" type="range" min="0" max="100" step="5" value="0"><b id="lMinV">0</b></label>
+      <select id="lSort" aria-label="Sort segments"><option value="default">Default order</option><option value="fit">Best fit first</option></select>
+      <label id="lLowWrap" class="check" hidden><input id="lLow" type="checkbox"> Low confidence only</label>
     </div>
     <div id="lenses" class="lenses"></div>
     <div class="best" id="best"></div>
