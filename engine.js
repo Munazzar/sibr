@@ -26,7 +26,30 @@
     gaming: ["game", "gaming", "esport", "gamer"],
     sports: ["sport", "football", "soccer", "gym", "martial", "cricket", "basketball"],
     charity: ["charity", "zakat", "sadaqah", "donat", "waqf", "fundrais"],
-    marriage: ["marriage", "nikah", "wedding", "spouse", "matrimon"]
+    marriage: ["marriage", "nikah", "wedding", "spouse", "matrimon"],
+    beauty: ["beauty", "skincare", "skin care", "cosmetic", "makeup", "salon", "barber", "groom"],
+    pets: ["pet", "dog", "cat", "vet"],
+    home: ["home", "house", "furniture", "decor", "diy", "cleaning", "interior"],
+    auto: ["car", "vehicle", "auto", "motor", "garage", "mechanic"],
+    media: ["music", "film", "movie", "book", "podcast", "stream"],
+    outdoor: ["outdoor", "hike", "hiking", "camp", "adventure"],
+    legal: ["legal", "law", "lawyer", "contract", "compliance", "account", "tax"],
+    realestate: ["real estate", "property", "rent", "landlord", "tenant", "mortgage"],
+    logistics: ["logistic", "delivery", "shipping", "courier", "fleet", "truck", "warehouse"],
+    construction: ["construction", "builder", "contractor", "plumb", "electric", "renovat"],
+    retail: ["shop", "store", "retail", "boutique"],
+    ecommerce: ["ecommerce", "e-commerce", "online store", "shopify", "amazon", "marketplace", "dropship"],
+    kids: ["kid", "child", "baby", "toddler", "toy"],
+    seniors: ["senior", "elderly", "retire", "aged care", "grandparent"],
+    green: ["eco", "green", "sustainab", "recycl", "solar", "climate", "carbon"],
+    privacy: ["privacy", "private", "encrypt", "data protection"],
+    security: ["security", "cyber", "safety", "cctv"],
+    language: ["language", "arabic", "english", "translat", "spanish"],
+    mental: ["mental", "therapy", "anxiety", "stress", "mindful", "wellbeing"],
+    hospitality: ["hotel", "hospitality", "restaurant", "cafe", "bar staff", "catering"],
+    agriculture: ["farm", "agri", "crop", "livestock"],
+    luxury: ["luxury", "premium", "high-end", "bespoke"],
+    fitness: ["fitness", "gym", "workout", "yoga", "sport"]
   };
 
   // Islamic-alignment flags. Output is a review flag, never a ruling.
@@ -58,12 +81,11 @@
 
   function hash(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0) / 4294967295; }
 
-  function detectTags(text) {
+  function themes(text) {
     const t = " " + text.toLowerCase() + " ";
-    const out = [];
-    for (const [tag, words] of Object.entries(TAGS)) if (words.some(w => t.includes(w))) out.push(tag);
-    return out.length ? out : ["b2b"];
+    return Object.entries(TAGS).filter(([, words]) => words.some(w => t.includes(w))).map(([tag]) => tag);
   }
+  function detectTags(text) { const out = themes(text); return out.length ? out : ["b2b"]; }
 
   function islamic(text) {
     const hits = FLAGS.filter(f => f.re.test(text));
@@ -102,9 +124,11 @@
     };
   }
 
-  // `only`: optional list of segment ids to score (the audience picked before the run).
-  function evaluate(idea, only) {
-    const keep = only && only.length ? new Set(only) : null;
+  // `only`: segment ids to score (the audience picked before the run).
+  // opts.open: no audience picked; score the whole catalogue and keep the best matches.
+  // opts.custom: audiences the person typed, scored by theme overlap with the idea.
+  function evaluate(idea, only, opts = {}) {
+    const keep = !opts.open && only && only.length ? new Set(only) : null;
     if (!idea.islamicNotes) idea.islamicNotes = islamic(idea.name + " " + (idea.note || "")).notes;
     const base = (LEVEL[idea.pain] + LEVEL[idea.value] + LEVEL[idea.target] + LEVEL[idea.growth]) / 4;
     const isl = ISL[idea.islamic], comp = COMP[idea.comp];
@@ -127,6 +151,20 @@
         if (idea.comp === "sat") why.push("Crowded space: needs a sharp wedge here");
         if (idea.tags.includes("faith") && group === "Community" && seg.aff.faith) why.push("Faith-first positioning is a genuine differentiator");
         return { ...seg, fit, why };
+      });
+    }
+    if (opts.open) {
+      const best = Object.entries(lenses).flatMap(([g, s]) => s.map(x => ({ ...x, from: g }))).sort((a, b) => b.fit - a.fit).slice(0, 15);
+      for (const g of Object.keys(lenses)) delete lenses[g];
+      lenses["Best matches"] = best;
+    }
+    if (opts.custom && opts.custom.length) {
+      lenses["Your audiences"] = opts.custom.map((c, i) => {
+        const theirs = themes(c), shared = idea.tags.filter(t => theirs.includes(t));
+        const aff = shared.length ? .85 : .25;
+        const fit = Math.max(.03, Math.min(.98, base * .35 + aff * .45 + .75 * comp.v * .2 + (hash(idea.name + c) - .5) * .08));
+        return { id: "c" + (i + 1), name: c.length > 40 ? c.slice(0, 38) + "…" : c, who: c, m: .75, fit, custom: true,
+                 why: [shared.length ? `Shares the idea's themes: ${shared.join(", ")}` : "No shared themes found between the idea and this audience"] };
       });
     }
     const all = Object.entries(lenses).flatMap(([g, s]) => s.map(x => ({ ...x, group: g })));

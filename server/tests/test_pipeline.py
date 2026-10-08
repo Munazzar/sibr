@@ -67,9 +67,9 @@ def test_big_audience_is_split_into_calls():
 
     laya = LimitedLaya()
     r = Pipeline(laya, llm_with(good_llm)).evaluate("halal investing app", SEGMENT_IDS)
-    assert len(laya.calls) == 2 and len(QUESTIONS) > MAX_PER_CALL
+    assert len(laya.calls) == 3 and len(QUESTIONS) > MAX_PER_CALL
     assert sum(len(cs) for cs in r["lenses"].values()) == len(SEGMENT_IDS)
-    assert "2 passes" in r["meta"]["steps"][2]["detail"]
+    assert "3 passes" in r["meta"]["steps"][2]["detail"]
 
 
 def test_end_to_end_with_llm():
@@ -82,7 +82,7 @@ def test_end_to_end_with_llm():
     assert r["top"][0]["id"] in ("fin", "dia")
     fin = next(c for c in r["lenses"]["Interest"] if c["id"] == "fin")
     assert fin["analysis"] == "Core audience." and fin["fit"] == .9
-    rev = next(c for c in r["lenses"]["Community"] if c["id"] == "rev")
+    rev = next(c for c in r["lenses"]["Faith & culture"] if c["id"] == "rev")
     assert rev["escalate"] is True
     assert r["idea"]["summary"] == "Strong niche."
     assert r["meta"]["llm_used"] is True
@@ -171,7 +171,7 @@ def test_segment_filter_narrows_questions_and_lenses():
     r = Pipeline(laya, llm_with(good_llm)).evaluate("halal investing app", ["fin", "dia", "nope"])
     asked = [k for k in laya.calls[0][1] if k.startswith("seg_")]
     assert asked == ["seg_dia", "seg_fin"]
-    assert set(r["lenses"]) == {"Community", "Interest"}
+    assert set(r["lenses"]) == {"Faith & culture", "Interest"}
     assert [c["id"] for c in r["top"]] == ["dia", "fin"] or [c["id"] for c in r["top"]] == ["fin", "dia"]
     assert r["meta"]["segments"] == ["dia", "fin"]
 
@@ -206,3 +206,38 @@ def test_request_log_needs_admin_key():
     assert "halal investing app" in ok["note"] and "Sibr" in ok["note"]
     assert c.get("/logs.json?since=%d" % ok["id"], headers={"x-sibr-admin": "adm1n"}).json()["entries"] == []
     assert "Sibr live logs" in c.get("/logs").text
+
+
+def open_llm(request):
+    msgs = json.loads(request.content)["messages"]
+    if "go-to-market" in msgs[0]["content"]:
+        return chat_reply('{"audiences": [{"name": "Dental clinics", "who": "independent dental clinics"},'
+                          ' {"name": "Gym owners", "who": "owners of small gyms"}, {"bad": 1}]}')
+    return good_llm(request)
+
+
+def test_open_audience_uses_llm_suggestions_and_custom():
+    laya = FakeLaya()
+    r = Pipeline(laya, llm_with(open_llm)).evaluate("booking software", open_audience=True, custom=["vets in Texas"])
+    asked = [k for k in laya.calls[0][1] if k.startswith(("seg_", "aud_"))]
+    assert asked == ["aud_c1", "aud_o1", "aud_o2"]
+    assert "owners of small gyms" in laya.calls[0][1]["aud_o2"]["instructions"]
+    assert [c["name"] for c in r["lenses"]["Suggested by Sibr"]] == ["Dental clinics", "Gym owners"]
+    assert r["lenses"]["Your audiences"][0]["who"] == "vets in Texas"
+    assert r["meta"]["audience"] == {"open": True, "custom": 1, "suggested": 2}
+    assert any(s["step"] == "Audience suggestions" and s["ok"] for s in r["meta"]["steps"])
+
+
+def test_open_audience_falls_back_without_llm():
+    laya = FakeLaya()
+    r = Pipeline(laya, llm_with(lambda req: httpx.Response(500))).evaluate("booking software", open_audience=True)
+    from sibr_api.pipeline import OPEN_FALLBACK
+    assert sum(len(cs) for cs in r["lenses"].values()) == len(OPEN_FALLBACK)
+    assert not next(s for s in r["meta"]["steps"] if s["step"] == "Audience suggestions")["ok"]
+
+
+def test_api_accepts_open_and_custom():
+    laya = FakeLaya()
+    client = TestClient(create_app(Pipeline(laya, llm_with(open_llm)), Settings(serve_site="0")))
+    r = client.post("/evaluate", json={"idea": "booking software", "open_audience": True, "custom": ["vets"]})
+    assert r.status_code == 200 and "Suggested by Sibr" in r.json()["lenses"]

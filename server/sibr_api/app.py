@@ -31,8 +31,12 @@ LOGS_PAGE = Path(__file__).with_name("logs.html")
 
 class EvaluateIn(BaseModel):
     idea: str = Field(min_length=3, max_length=5000)
-    # Audience segment ids to score (see segments.json). Empty or missing means the core 21.
-    segments: Optional[List[str]] = Field(default=None, max_length=64)
+    # Audience segment ids to score (see segments.json). With none of these three, the core 21.
+    segments: Optional[List[str]] = Field(default=None, max_length=300)
+    # Open mode: no filter; the LLM suggests likely customer audiences and Laya scores them.
+    open_audience: bool = False
+    # Audiences the person typed, e.g. "dentists in Texas".
+    custom: Optional[List[str]] = Field(default=None, max_length=12)
 
 
 def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:
@@ -105,11 +109,12 @@ def create_app(pipeline: Pipeline = None, settings: Settings = None) -> FastAPI:
     def evaluate(body: EvaluateIn, request: Request, x_sibr_key: Optional[str] = Header(default=None)):
         idea = " ".join(body.idea.split())
         request.state.note = (idea[:100] + "…" if len(idea) > 100 else idea) + (
-            f" · {len(body.segments)} segments" if body.segments else "")
+            f" · {len(body.segments)} segments" if body.segments else "") + (
+            " · open audience" if body.open_audience else "") + (f" · {len(body.custom)} custom" if body.custom else "")
         if settings.api_key and not hmac.compare_digest(x_sibr_key or "", settings.api_key):
             raise HTTPException(401, "Missing or wrong access key")
         try:
-            out = pipeline.evaluate(body.idea, body.segments)
+            out = pipeline.evaluate(body.idea, body.segments, body.open_audience, body.custom)
             request.state.note += f" · Sibr {out.get('sibr')}"
             return out
         except LayaUnavailable as e:

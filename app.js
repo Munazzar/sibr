@@ -170,44 +170,59 @@
   const segCount = r => Object.values(r.lenses).reduce((n, cs) => n + cs.length, 0);
 
   // ---------- Audience picked before the run ----------
-  // Quick picks set a sensible group in one click; groups below fold away and can be searched.
+  // Open (the default) applies no filter: Sibr finds the audiences. Quick picks set a group in one
+  // click; folded groups and search fine-tune it; people can also type their own audiences.
   const ALL_SEGS = Object.values(SEGMENTS).flat().map(x => x.id);
-  const PRESET_IDS = Object.fromEntries(PRESETS.map(p => [p.id, p.ids === "all" ? ALL_SEGS : p.ids]));
-  const CORE_QUESTIONS = 22, PER_CALL = 64;
-  let aud;
-  try { aud = new Set(JSON.parse(localStorage.getItem("sibrAud") || "null") || PRESET_IDS.core); } catch { aud = new Set(PRESET_IDS.core); }
-  aud = new Set(ALL_SEGS.filter(id => aud.has(id)));
-  if (!aud.size) aud = new Set(PRESET_IDS.core);
+  const PRESET_IDS = Object.fromEntries(PRESETS.filter(p => p.ids !== "open").map(p => [p.id, p.ids === "all" ? ALL_SEGS : p.ids]));
+  const CORE_QUESTIONS = 22, PER_CALL = 64, SUGGESTED = 10, MAX_CUSTOM = 12;
+  const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? d : v; } catch { return d; } };
+  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+  let open = load("sibrAudOpen", true);
+  let aud = new Set(ALL_SEGS.filter(id => new Set(load("sibrAud", PRESET_IDS.core)).has(id)));
+  let custom = load("sibrAudCustom", []).filter(c => typeof c === "string").slice(0, MAX_CUSTOM);
   const openGroups = new Set();
   let find = "";
-  const audList = () => ALL_SEGS.filter(id => aud.has(id));
-  const samePreset = () => PRESETS.find(p => { const ids = PRESET_IDS[p.id]; return ids.length === aud.size && ids.every(id => aud.has(id)); });
+  const audList = () => open ? [] : ALL_SEGS.filter(id => aud.has(id));
+  const samePreset = () => open ? PRESETS.find(p => p.ids === "open")
+    : PRESETS.find(p => { const ids = PRESET_IDS[p.id]; return ids && ids.length === aud.size && ids.every(id => aud.has(id)); });
 
   function renderAudience() {
     const cur = samePreset();
-    $("#audPresets").innerHTML = PRESETS.map(p => `<button type="button" data-p="${p.id}" aria-pressed="${cur === p}">${esc(p.name)} <small>${PRESET_IDS[p.id].length}</small></button>`).join("") +
+    $("#audPresets").innerHTML = PRESETS.map(p => `<button type="button" data-p="${p.id}" aria-pressed="${cur === p}" class="${p.ids === "open" ? "openP" : ""}">${esc(p.name)}${p.ids === "open" ? "" : ` <small>${PRESET_IDS[p.id].length}</small>`}</button>`).join("") +
       `<button type="button" class="custom" aria-pressed="${!cur}" disabled>Custom</button>`;
     $("#audPresetHint").textContent = cur ? cur.hint : "Your own mix. Pick a quick pick above to start over.";
     const q = find.trim().toLowerCase();
+    $("#audGroups").classList.toggle("dim", open);
     $("#audGroups").innerHTML = Object.entries(SEGMENTS).map(([g, segs]) => {
       const list = q ? segs.filter(x => (x.name + " " + x.who + " " + g).toLowerCase().includes(q)) : segs;
       if (!list.length) return "";
-      const on = segs.filter(x => aud.has(x.id));
-      const preview = on.length === segs.length ? "all" : on.length ? on.slice(0, 3).map(x => x.name).join(", ") + (on.length > 3 ? ` +${on.length - 3}` : "") : "none";
+      const on = open ? [] : segs.filter(x => aud.has(x.id));
+      const preview = open ? "" : on.length === segs.length ? "all" : on.length ? on.slice(0, 3).map(x => x.name).join(", ") + (on.length > 3 ? ` +${on.length - 3}` : "") : "none";
+      const hint = (window.SIBR_SEGMENTS.groups.find(x => x.name === g) || {}).hint || "";
       return `<details class="audGroup" data-g="${esc(g)}" ${q || openGroups.has(g) ? "open" : ""}>
-        <summary><b>${esc(g)}</b><span class="cnt${on.length ? " on" : ""}">${on.length}/${segs.length}</span><span class="pv">${esc(preview)}</span>
+        <summary><b>${esc(g)}</b><span class="cnt${on.length ? " on" : ""}">${on.length}/${segs.length}</span><span class="pv">${esc(preview || hint)}</span>
           <span class="gAct"><button type="button" data-all="${esc(g)}">All</button><button type="button" data-none="${esc(g)}">None</button></span></summary>
-        <div class="audSegs">${list.map(x => `<button type="button" class="audS" data-id="${x.id}" aria-pressed="${aud.has(x.id)}" title="${esc(x.who)}">${esc(x.name)}</button>`).join("")}</div>
+        <div class="audSegs">${list.map(x => `<button type="button" class="audS" data-id="${x.id}" aria-pressed="${!open && aud.has(x.id)}" title="${esc(x.who)}">${esc(x.name)}</button>`).join("")}</div>
       </details>`;
-    }).join("") || '<p class="muted">No segment matches that.</p>';
-    const n = aud.size, qn = CORE_QUESTIONS + n, calls = n <= PER_CALL - CORE_QUESTIONS ? 1 : 1 + Math.ceil((n - (PER_CALL - CORE_QUESTIONS)) / PER_CALL);
-    $("#audSum").textContent = n ? `${cur ? cur.name : "Custom"} · ${n} segment${n === 1 ? "" : "s"}` : "None picked";
-    $("#audCost").innerHTML = !n ? '<span class="warn">Pick at least one segment to run.</span>' : `<b>${n}</b> of ${ALL_SEGS.length} segments · Laya asks <b>${qn}</b> questions${calls > 1 ? ` in ${calls} passes (slower)` : ""}`;
-    try { localStorage.setItem("sibrAud", JSON.stringify([...aud])); } catch {}
+    }).join("") || '<p class="muted">No segment matches that. Add it as your own audience below.</p>';
+    $("#audFineN").textContent = `${ALL_SEGS.length} segments in ${Object.keys(SEGMENTS).length} groups`;
+    $("#audCustomList").innerHTML = custom.map((c, i) => `<span class="cAud">${esc(c)}<button type="button" data-rm="${i}" aria-label="Remove ${esc(c)}">×</button></span>`).join("");
+    $("#audCustomAdd").disabled = custom.length >= MAX_CUSTOM;
+    const n = open ? SUGGESTED : aud.size, extra = custom.length, total = n + extra;
+    const qn = CORE_QUESTIONS + total, calls = total <= PER_CALL - CORE_QUESTIONS ? 1 : 1 + Math.ceil((total - (PER_CALL - CORE_QUESTIONS)) / PER_CALL);
+    const yours = extra ? ` + ${extra} of your own` : "";
+    $("#audSum").textContent = open ? `Open · Sibr finds the audiences${yours}` : total ? `${cur ? cur.name : "Custom"} · ${aud.size} segment${aud.size === 1 ? "" : "s"}${yours}` : "None picked";
+    $("#audCost").innerHTML = open
+      ? `No filter. Laya scores about <b>${SUGGESTED}</b> audiences suggested for your idea${yours} (<b>${qn}</b> questions). The Quick engine scans all ${ALL_SEGS.length} and shows the best 15.`
+      : !total ? '<span class="warn">Pick at least one segment, or choose Open.</span>'
+      : `<b>${aud.size}</b> of ${ALL_SEGS.length} segments${yours} · Laya asks <b>${qn}</b> questions${calls > 1 ? ` in ${calls} passes (slower)` : ""}`;
+    save("sibrAud", [...aud]); save("sibrAudOpen", open); save("sibrAudCustom", custom);
   }
   $("#audPresets").addEventListener("click", e => {
     const b = e.target.closest("button[data-p]"); if (!b) return;
-    aud = new Set(PRESET_IDS[b.dataset.p]); renderAudience();
+    if (b.dataset.p === "open") open = true;
+    else { open = false; aud = new Set(PRESET_IDS[b.dataset.p]); }
+    renderAudience();
   });
   $("#audGroups").addEventListener("toggle", e => {
     const d = e.target; if (!d.dataset || !d.dataset.g || find) return;
@@ -215,6 +230,8 @@
   }, true);
   $("#audGroups").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
+    // Picking anything switches from Open to your own selection.
+    if (open && (b.dataset.all || b.dataset.id)) { open = false; aud = new Set(); }
     if (b.dataset.all || b.dataset.none) {
       e.preventDefault();
       const ids = SEGMENTS[b.dataset.all || b.dataset.none].map(x => x.id);
@@ -226,7 +243,18 @@
     renderAudience();
   });
   $("#audFind").addEventListener("input", e => { find = e.target.value; renderAudience(); });
-  $("#audClear").addEventListener("click", () => { aud = new Set(); renderAudience(); });
+  $("#audClear").addEventListener("click", () => { open = false; aud = new Set(); custom = []; renderAudience(); });
+  function addCustom() {
+    const v = $("#audCustomIn").value.trim().replace(/\s+/g, " ").slice(0, 120);
+    if (v.length < 3 || custom.length >= MAX_CUSTOM || custom.some(c => c.toLowerCase() === v.toLowerCase())) return;
+    custom.push(v); $("#audCustomIn").value = ""; renderAudience();
+  }
+  $("#audCustomAdd").addEventListener("click", addCustom);
+  $("#audCustomIn").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } });
+  $("#audCustomList").addEventListener("click", e => {
+    const b = e.target.closest("button[data-rm]"); if (!b) return;
+    custom.splice(+b.dataset.rm, 1); renderAudience();
+  });
   renderAudience();
 
   // ---------- Lens map with filters ----------
@@ -259,7 +287,7 @@
     }).join("");
     $("#lCount").textContent = `${shown} segments shown`;
     requestAnimationFrame(() => setTimeout(() => document.querySelectorAll(".bar i").forEach(b => b.style.width = b.dataset.w + "%"), 40));
-    $("#best").innerHTML = `Strongest fit: ${r.top.map(t => `<b>${esc(t.name)}</b> <small>(${t.group})</small>`).join(" · ")}. Click any segment for the reasoning.`;
+    $("#best").innerHTML = `Strongest fit: ${r.top.map(t => `<b>${esc(t.name)}</b> <small>(${esc(t.from || t.group)})</small>`).join(" · ")}. Click any segment for the reasoning.`;
     document.querySelectorAll(".cell").forEach(c => c.addEventListener("click", () => openCell(c.dataset.g, c.dataset.id)));
   }
 
@@ -270,6 +298,7 @@
     $("#drawerBody").innerHTML = `
       <div class="tag">${esc(group)}</div>
       <h3>${esc(s.name)}</h3>
+      ${s.from ? `<div class="hint">${esc(s.from)}</div>` : ""}${s.custom && s.who !== s.name ? `<div class="hint">${esc(s.who)}</div>` : ""}
       <div class="hint">${esc(r.idea.name)}</div>
       <div class="big" style="color:${color(s.fit)}">${Math.round(s.fit * 100)}</div>
       ${s.analysis ? `<p>${esc(s.analysis)}</p>` : ""}
@@ -319,16 +348,16 @@
     } catch { status("Can't reach it. Is this device on Tailscale and is Sibr running on your PC?", false); }
   });
 
-  async function remote(text, segments, retry = true) {
+  async function remote(text, segments, aopts = {}, retry = true) {
     if (!apiUrl()) throw new Error("no Laya address set");
     const headers = { "content-type": "application/json" };
     if (ls.get("sibrKey")) headers["x-sibr-key"] = ls.get("sibrKey");
     let res;
-    try { res = await fetch(apiUrl() + "/evaluate", { method: "POST", headers, body: JSON.stringify(segments ? { idea: text, segments } : { idea: text }) }); }
+    try { res = await fetch(apiUrl() + "/evaluate", { method: "POST", headers, body: JSON.stringify({ idea: text, segments, open_audience: !!aopts.open, custom: aopts.custom || [] }) }); }
     catch { throw new Error("can't reach your PC. Connect this device to Tailscale and check Sibr is running"); }
     if (res.status === 401 && retry) {
       const k = prompt("Sibr access key");
-      if (k) { ls.set("sibrKey", k.trim()); renderEngine(); return remote(text, segments, false); }
+      if (k) { ls.set("sibrKey", k.trim()); renderEngine(); return remote(text, segments, aopts, false); }
     }
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "HTTP " + res.status);
     return res.json();
@@ -338,7 +367,7 @@
   const STAGES = {
     laya: [["Reading your idea", "The LLM writes an idea card: problem, user, solution, revenue, delivery."],
            ["Searching the web", "Three free searches for competitors, Reddit threads and reviews."],
-           ["Asking Laya", "Typed questions answered in one pass: scores, choices and a fit for each segment you picked."],
+           ["Asking Laya", "Typed questions: scores, choices and a fit for each audience (suggested, picked or your own)."],
            ["Writing the verdict", "The LLM explains each segment and sums up."]],
     quick: [["Scanning keywords", "Finding the themes in your idea."], ["Applying rules", "Scoring the six parameters."],
             ["Mapping your segments", "Scoring each audience you picked."]]
@@ -393,16 +422,16 @@
     const v = input.value.trim();
     const btn = $("#ideaForm button");
     if (!v || btn.disabled) return;
-    if (!aud.size) { $("#audience").open = true; $("#audience").scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    if (!open && !aud.size && !custom.length) { $("#audience").open = true; $("#audience").scrollIntoView({ behavior: "smooth", block: "center" }); return; }
     btn.disabled = true; btn.textContent = engine === "laya" ? "Running Laya…" : "Running…";
     const stop = startProcessing(engine === "laya" ? "laya" : "quick");
-    const segs = audList();
+    const segs = audList(), aopts = { open, custom: [...custom] };
     let r;
     try {
       if (engine === "laya") {
-        try { r = await remote(v, segs); }
-        catch (err) { r = evaluate(fromText(v), segs); r.fallback = err.message; }
-      } else { await new Promise(res => setTimeout(res, 350)); r = evaluate(fromText(v), segs); }
+        try { r = await remote(v, segs, aopts); }
+        catch (err) { r = evaluate(fromText(v), segs, aopts); r.fallback = err.message; }
+      } else { await new Promise(res => setTimeout(res, 350)); r = evaluate(fromText(v), segs, aopts); }
     } finally { await stop(); btn.disabled = false; renderEngine(); }
     results.unshift(r);
     active = 0;
