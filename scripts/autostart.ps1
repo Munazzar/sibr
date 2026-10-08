@@ -12,7 +12,7 @@ $pyw = Join-Path $server ".venv\Scripts\pythonw.exe"
 if (-not (Test-Path $pyw)) { Write-Host "Run scripts\setup.ps1 first."; exit 1 }
 $action = New-ScheduledTaskAction -Execute $pyw -WorkingDirectory $server `
     -Argument "-m uvicorn sibr_api.app:app --host 127.0.0.1 --port 8787"
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
 Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
 Start-ScheduledTask -TaskName $name
