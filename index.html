@@ -19,6 +19,8 @@
 </head>
 <body>
 <canvas id="bg" aria-hidden="true"></canvas>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="flow" aria-hidden="true"><span class="flowLine"></span><span class="flowFill"></span><i></i><i></i><i></i></div>
 
 <header class="hero">
   <div class="top"><div class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>SIBR<span class="sub">matrix</span></div><a class="cta" href="https://munazzar.github.io/plotline/#/bench">Open the Workbench <span aria-hidden="true">→</span></a></div>
@@ -134,11 +136,11 @@
     <div class="filters">
       <div class="chips" id="lGroups" role="group" aria-label="Lens group"></div>
       <label class="range">Min fit <input id="lMin" type="range" min="0" max="100" step="5" value="0"><b id="lMinV">0</b></label>
-      <select id="lSort" aria-label="Sort segments"><option value="default">Default order</option><option value="fit">Best fit first</option></select>
+      <select id="lSort" aria-label="Sort audiences"><option value="fit">Best fit first</option><option value="default">Catalogue order</option></select>
       <label id="lLowWrap" class="check" hidden><input id="lLow" type="checkbox"> Low confidence only</label>
     </div>
     <div id="lenses" class="lenses"></div>
-    <div class="best" id="best"></div>
+    <p class="lhint" id="best"></p>
   </section>
 
   <section class="panel explain">
