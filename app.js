@@ -488,25 +488,126 @@
   renderEngine();
   renderAll();
 
-  // Background lattice. Drawn once (and on resize); the slow drift is a CSS transform, so it
-  // runs on the GPU compositor and costs the page nothing while you type or scroll.
-  const cv = $("#bg"), ctx = cv.getContext("2d"), STEP = 120;
-  function drawBg() {
-    const W = cv.width = innerWidth, H = cv.height = innerHeight + 2 * STEP;
-    ctx.lineWidth = 1;
-    for (let y = 0; y < H + STEP; y += STEP)
-      for (let x = -STEP; x < W + STEP; x += STEP) {
-        const px = x + ((y / STEP) % 2 ? STEP / 2 : 0), py = y;
-        const a = (px + py) * .0005, alpha = .05 + .07 * (.5 + .5 * Math.sin(px * .004 + py * .003));
-        ctx.strokeStyle = `rgba(214,180,106,${alpha.toFixed(3)})`;
-        ctx.beginPath();
-        for (let k = 0; k < 4; k++) { const t = a + k * Math.PI / 2; ctx[k ? "lineTo" : "moveTo"](px + Math.cos(t) * 30, py + Math.sin(t) * 30); }
-        ctx.closePath(); ctx.stroke();
+  // Background light streams. Hundreds of faint threads of light ride a slowly turning flow
+  // field, leaving soft trails. Scrolling makes the current surge in the scroll direction and
+  // shifts its colour from gold to emerald down the page; the pointer stirs a swirl that the
+  // threads bend around and brighten in, and a click sends out a ripple. Drawn at reduced
+  // resolution for softness and speed; it sleeps in hidden tabs and holds still for reduced motion.
+  (function streams() {
+    const cv = $("#bg"), ctx = cv.getContext("2d");
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const RES = .6, TAU = Math.PI * 2;
+    let W = 0, H = 0, ps = [], t = 0, last = performance.now();
+    let sy = scrollY, vel = 0, surge = 0;              // scroll velocity, smoothed
+    const ptr = { x: -1e4, y: -1e4, vx: 0, vy: 0, on: 0, heat: 0 };
+    const ripples = [];
+
+    function spawn(p, anywhere) {
+      p.x = anywhere ? Math.random() * W : -10 - Math.random() * 40;
+      p.y = Math.random() * H;
+      p.px = p.x; p.py = p.y;
+      p.life = 0; p.max = 260 + Math.random() * 520;
+      p.sp = .55 + Math.random() * .9;
+      p.w = Math.random() < .12 ? 1.6 : .9;          // a few brighter strands
+      p.k = Math.random();                             // colour offset
+      return p;
+    }
+    function size() {
+      W = Math.round(innerWidth * RES); H = Math.round(innerHeight * RES);
+      cv.width = W; cv.height = H;
+      const n = Math.min(340, Math.round(innerWidth * innerHeight / 6200));
+      ps = Array.from({ length: n }, () => spawn({}, true));
+      ctx.lineCap = "round";
+    }
+    // Smooth, slowly evolving direction field: mostly rightward with long rolling waves.
+    function angle(x, y) {
+      const o = sy * RES * .35;                       // the field scrolls with the page (parallax)
+      const yy = y + o;
+      return Math.sin(x * .0055 + t * .11) * .9 + Math.cos(yy * .0071 - t * .08) * .7
+        + Math.sin((x - yy) * .0032 + t * .05) * .5 + surge * .9;
+    }
+    function frame(now) {
+      const dt = Math.min(50, now - last) / 16.67; last = now;
+      if (document.hidden) { requestAnimationFrame(frame); return; }
+      t += .01 * dt;
+
+      // Scroll: velocity -> surge (signed), decays smoothly.
+      const d = scrollY - sy; sy = scrollY;
+      vel += (d - vel) * .2;
+      surge += (Math.max(-1.2, Math.min(1.2, vel * .02)) - surge) * .08;
+      const prog = Math.min(1, scrollY / Math.max(1, document.documentElement.scrollHeight - innerHeight));
+      ptr.heat *= .94;
+
+      // Fade old trails toward transparent so the aurora behind still shows.
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = `rgba(0,0,0,${(.07 * dt).toFixed(3)})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "lighter";
+
+      const R = 190 * RES, px = ptr.x * RES, py = ptr.y * RES;
+      const boost = 1 + Math.abs(surge) * 2.2;
+      for (const p of ps) {
+        let a = angle(p.x, p.y), sp = p.sp * boost * 1.6;
+        let vx = Math.cos(a) * sp, vy = Math.sin(a) * sp, glow = 0;
+        // Pointer: a swirl around it, a gentle pull in, and a push along its motion.
+        const dx = p.x - px, dy = p.y - py, r2 = dx * dx + dy * dy;
+        if (r2 < R * R * 4) {
+          const r = Math.sqrt(r2) + 1, f = Math.max(0, 1 - r / (R * 2));
+          const f2 = f * f * (.6 + ptr.on * .4);
+          vx += (-dy / r * 3.2 - dx / r * .8) * f2 + ptr.vx * RES * .08 * f2;
+          vy += (dx / r * 3.2 - dy / r * .8) * f2 + ptr.vy * RES * .08 * f2;
+          glow = f2 * (1 + ptr.heat);
+        }
+        for (const rp of ripples) {
+          const ex = p.x - rp.x, ey = p.y - rp.y, r = Math.sqrt(ex * ex + ey * ey) + 1;
+          const band = 1 - Math.min(1, Math.abs(r - rp.r) / (26 * RES));
+          if (band > 0) { vx += ex / r * band * 4 * rp.a; vy += ey / r * band * 4 * rp.a; glow += band * rp.a; }
+        }
+        p.px = p.x; p.py = p.y;
+        p.x += vx * dt; p.y += vy * dt; p.life += dt;
+        if (p.x > W + 20 || p.x < -60 || p.y < -20 || p.y > H + 20 || p.life > p.max) { spawn(p, p.life > p.max); continue; }
+        const fade = Math.min(1, p.life / 40, (p.max - p.life) / 60);
+        const al = (.16 + .7 * Math.min(1, glow)) * fade * (p.w > 1 ? 1.4 : 1);
+        // Gold at the top of the page, drifting to emerald further down.
+        const m = Math.min(1, Math.max(0, prog * 1.1 + (p.k - .5) * .5));
+        const R0 = 241 - 178 * m, G0 = 216 - 25 * m, B0 = 154 - 11 * m;
+        const hot = Math.min(1, glow);
+        ctx.strokeStyle = `rgba(${R0 + (255 - R0) * hot | 0},${G0 + (250 - G0) * hot | 0},${B0 + (230 - B0) * hot | 0},${al.toFixed(3)})`;
+        ctx.lineWidth = p.w + hot * 1.2;
+        ctx.beginPath(); ctx.moveTo(p.px, p.py); ctx.lineTo(p.x, p.y); ctx.stroke();
       }
-  }
-  let bgTimer; let lastW = innerWidth;
-  addEventListener("resize", () => { if (innerWidth === lastW && innerHeight + 2 * STEP <= cv.height) return; lastW = innerWidth; clearTimeout(bgTimer); bgTimer = setTimeout(drawBg, 150); });
-  drawBg();
+      if (ptr.on) {                                   // a faint living bloom under the pointer
+        const g = ctx.createRadialGradient(px, py, 0, px, py, R * 1.3);
+        g.addColorStop(0, `rgba(241,216,154,${(.012 * (1 + ptr.heat) * dt).toFixed(4)})`); g.addColorStop(1, "rgba(241,216,154,0)");
+        ctx.fillStyle = g; ctx.fillRect(px - R * 1.3, py - R * 1.3, R * 2.6, R * 2.6);
+      }
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const rp = ripples[i]; rp.r += 5 * dt * RES * 1.6; rp.a *= Math.pow(.965, dt);
+        if (rp.a < .03) ripples.splice(i, 1);
+      }
+      ptr.vx *= .85; ptr.vy *= .85;
+      if (!still) requestAnimationFrame(frame);
+    }
+
+    addEventListener("pointermove", e => {
+      const pn = e.target.closest && e.target.closest(".panel");
+      if (pn) { const b = pn.getBoundingClientRect(); pn.style.setProperty("--mx", e.clientX - b.left + "px"); pn.style.setProperty("--my", e.clientY - b.top + "px"); }
+      if (ptr.x > -1e3) { ptr.vx = e.clientX - ptr.x; ptr.vy = e.clientY - ptr.y; ptr.heat = Math.min(1.5, ptr.heat + Math.hypot(ptr.vx, ptr.vy) * .004); }
+      ptr.x = e.clientX; ptr.y = e.clientY; ptr.on = 1;
+    }, { passive: true });
+    addEventListener("pointerdown", e => {
+      ripples.push({ x: e.clientX * RES, y: e.clientY * RES, r: 0, a: 1 });
+      if (ripples.length > 4) ripples.shift();
+    }, { passive: true });
+    document.addEventListener("pointerleave", () => { ptr.x = ptr.y = -1e4; ptr.on = 0; });
+    addEventListener("blur", () => { ptr.x = ptr.y = -1e4; ptr.on = 0; });
+
+    let rt, lw = innerWidth;
+    addEventListener("resize", () => { if (innerWidth === lw && Math.abs(innerHeight * RES - H) < 120) return; lw = innerWidth; clearTimeout(rt); rt = setTimeout(size, 150); });
+    size();
+    if (still) { for (let i = 0; i < 90; i++) frame(last + 16.67 * (i + 1)); }   // one settled frame
+    else requestAnimationFrame(frame);
+  })();
 
   // Light flow: each panel's node on the thread lights up while it is on screen; every
   // animation pauses while the tab is hidden.
