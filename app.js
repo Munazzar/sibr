@@ -258,10 +258,14 @@
   renderAudience();
 
   // ---------- Lens map with filters ----------
-  const LF = { group: "", min: 0, sort: "default", low: false };
+  // Fits for one idea tend to bunch together (say 30 to 75), so the colours rank each audience
+  // against the others for this idea: top fifth, middle, bottom third. The number stays absolute.
+  const LF = { group: "", min: 0, sort: "fit", low: false, open: new Set() };
+  const PREVIEW = 6;
   function renderLensFilters() {
     const groups = Object.keys(results[active].lenses);
-    $("#lGroups").innerHTML = ["", ...groups].map(g => `<button type="button" data-g="${esc(g)}" aria-pressed="${LF.group === g}">${g || "All"}</button>`).join("");
+    if (LF.group && !groups.includes(LF.group)) LF.group = "";
+    $("#lGroups").innerHTML = ["", ...groups].map(g => `<button type="button" data-g="${esc(g)}" aria-pressed="${LF.group === g}">${g ? esc(g) : "All"}</button>`).join("");
     document.querySelectorAll("#lGroups button").forEach(b => b.addEventListener("click", () => { LF.group = b.dataset.g; renderLenses(); }));
     $("#lLowWrap").hidden = engineOf(results[active]) !== "laya";
   }
@@ -269,27 +273,68 @@
   $("#lSort").addEventListener("input", e => { LF.sort = e.target.value; renderLenses(); });
   $("#lLow").addEventListener("change", e => { LF.low = e.target.checked; renderLenses(); });
 
+  function tiers(cells) {
+    const v = cells.map(c => c.fit).sort((a, b) => a - b);
+    const q = p => v.length ? v[Math.round(p * (v.length - 1))] : 0;
+    const hi = q(.8), lo = q(.3);
+    return { med: q(.5), of: f => v.length < 4 ? (f >= .7 ? "hi" : f >= .45 ? "mid" : "lo") : f >= hi ? "hi" : f <= lo ? "lo" : "mid" };
+  }
+  const pct100 = f => Math.round(f * 100);
+  function lensRow(s, group, t, med) {
+    return `<button type="button" class="lrow t-${t.of(s.fit)}" data-g="${esc(group)}" data-id="${esc(s.id)}">
+      <span class="nm">${esc(s.name)}${s.escalate ? ' <em class="low" title="Low confidence: worth a human check">check</em>' : ""}</span>
+      <span class="v">${pct100(s.fit)}</span>
+      <span class="track"><i style="--s:${s.fit.toFixed(3)}"></i><b class="med" style="left:${pct100(med)}%"></b></span>
+    </button>`;
+  }
+
   function renderLenses() {
     const r = results[active];
     renderLensFilters();
     $("#lensIdea").textContent = r.idea.name;
+    const keep = s => s.fit * 100 >= LF.min && (!LF.low || s.escalate);
+    const all = Object.entries(r.lenses).flatMap(([g, cs]) => cs.map(c => ({ ...c, group: g })));
+    const t = tiers(all);
+    const groups = Object.entries(r.lenses).filter(([g]) => !LF.group || g === LF.group);
     let shown = 0;
-    $("#lenses").innerHTML = Object.entries(r.lenses).filter(([g]) => !LF.group || g === LF.group).map(([group, segs]) => {
-      let list = segs.filter(s => s.fit * 100 >= LF.min && (!LF.low || s.escalate));
+    const cards = groups.map(([group, segs]) => {
+      let list = segs.filter(keep);
       if (LF.sort === "fit") list = [...list].sort((a, b) => b.fit - a.fit);
       shown += list.length;
-      return `<div class="lens"><h3>${group}</h3>
-        ${list.map(s => `<div class="cell" data-g="${esc(group)}" data-id="${s.id}">
-          <span class="nm">${esc(s.name)}${s.escalate ? ' <em class="low" title="Low confidence">check</em>' : ""}</span><span class="v">${Math.round(s.fit * 100)}</span>
-          <span class="bar"><i style="background:${color(s.fit)}" data-w="${Math.round(s.fit * 100)}"></i></span>
-        </div>`).join("") || '<p class="muted">No segments match.</p>'}
-      </div>`;
+      const open = LF.group || LF.open.has(group) || list.length <= PREVIEW + 1;
+      const avg = segs.length ? pct100(segs.reduce((a, s) => a + s.fit, 0) / segs.length) : 0;
+      return `<article class="lgrp">
+        <header><h3>${esc(group)}</h3><span class="lmeta">${segs.length} · avg <b>${avg}</b></span></header>
+        <div class="lrows">${(open ? list : list.slice(0, PREVIEW)).map(s => lensRow(s, group, t, t.med)).join("") || '<p class="muted lnone">No audiences match these filters.</p>'}</div>
+        ${open || list.length <= PREVIEW ? (LF.open.has(group) && !LF.group ? `<button type="button" class="lmore" data-more="${esc(group)}">Show fewer</button>` : "")
+          : `<button type="button" class="lmore" data-more="${esc(group)}">Show all ${list.length}</button>`}
+      </article>`;
     }).join("");
-    $("#lCount").textContent = `${shown} segments shown`;
-    requestAnimationFrame(() => setTimeout(() => document.querySelectorAll(".bar i").forEach(b => b.style.width = b.dataset.w + "%"), 40));
-    $("#best").innerHTML = `Strongest fit: ${r.top.map(t => `<b>${esc(t.name)}</b> <small>(${esc(t.from || t.group)})</small>`).join(" · ")}. Click any segment for the reasoning.`;
-    document.querySelectorAll(".cell").forEach(c => c.addEventListener("click", () => openCell(c.dataset.g, c.dataset.id)));
+    const best = all.filter(keep).sort((a, b) => b.fit - a.fit).slice(0, 5);
+    const lead = best.length ? `<div class="lead">
+        <div class="leadHead"><h3>Best audiences for this idea</h3>
+          <span class="legend"><span><i class="t-hi"></i>Top fifth</span><span><i class="t-mid"></i>Middle</span><span><i class="t-lo"></i>Bottom third</span><span><i class="mk"></i>Median for this idea</span></span></div>
+        <ol>${best.map((s, i) => `<li><button type="button" class="leadRow" data-g="${esc(s.group)}" data-id="${esc(s.id)}">
+          <span class="rk">${String(i + 1).padStart(2, "0")}</span>
+          <span class="who"><b>${esc(s.name)}</b><small>${esc(s.from || s.group)}</small></span>
+          <span class="track"><i style="--s:${s.fit.toFixed(3)}"></i></span>
+          <span class="v">${pct100(s.fit)}</span></button></li>`).join("")}</ol></div>` : "";
+    $("#lenses").innerHTML = lead + `<div class="lgroups${groups.length === 1 ? " one" : ""}">${cards}</div>`;
+    $("#lCount").textContent = `${shown} of ${all.length} audiences`;
+    $("#best").innerHTML = "Click any audience to see why it fits. Numbers are the chance this audience wants the idea and would pay for it.";
+    if (grownFor !== r) {  // bars grow in once per result, not on every filter change
+      grownFor = r;
+      $("#lenses").classList.remove("grown");
+      requestAnimationFrame(() => setTimeout(() => $("#lenses").classList.add("grown"), 30));
+    }
   }
+  let grownFor = null;
+  $("#lenses").addEventListener("click", e => {
+    const more = e.target.closest("[data-more]");
+    if (more) { const g = more.dataset.more; LF.open.has(g) ? LF.open.delete(g) : LF.open.add(g); renderLenses(); return; }
+    const row = e.target.closest("[data-id]");
+    if (row) openCell(row.dataset.g, row.dataset.id);
+  });
 
   function renderAll() { renderMatrix(); renderReport(); renderLenses(); }
 
@@ -462,4 +507,12 @@
   let bgTimer; let lastW = innerWidth;
   addEventListener("resize", () => { if (innerWidth === lastW && innerHeight + 2 * STEP <= cv.height) return; lastW = innerWidth; clearTimeout(bgTimer); bgTimer = setTimeout(drawBg, 150); });
   drawBg();
+
+  // Light flow: each panel's node on the thread lights up while it is on screen; every
+  // animation pauses while the tab is hidden.
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver(es => es.forEach(e => e.target.classList.toggle("lit", e.isIntersecting)), { rootMargin: "-25% 0px -25% 0px" });
+    document.querySelectorAll("main .panel").forEach(p => io.observe(p));
+  }
+  document.addEventListener("visibilitychange", () => document.body.classList.toggle("paused", document.hidden));
 })();
